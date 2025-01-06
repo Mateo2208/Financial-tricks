@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Atajo de tus Finanzas Personales</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div id="splashScreen">
+        Cargando...
+     </div>
+      
+  <header>
+    <h1>Atajo de tus Finanzas Personales</h1>
+    <h5>By: Mats</h5>
+  </header>
+
+  <form id="financeForm">
+    <h2>Registro de Finanzas</h2>
+
+    <label for="author">Autor del asiento</label>
+    <select id="author" required>
+      <option value="" disabled selected>Quien realiza este movimineto?</option>
+      <option value="Ever">Ever</option>
+      <option value="Ma_Nelfi">Ma. Nelfi</option>
+    </select>
+    <label for="type">Tipo de transacción</label>
+    <select id="type" required onchange="updateSubMenu()">
+      <option value="" disabled selected>Selecciona el tipo</option>
+      <option value="Ingreso">Ingreso</option>
+      <option value="Egreso">Egreso</option>
+    </select>
+    <div id="incomeMenu" style="display: none;">
+      <label for="incomeCategory">Categoría de Ingreso</label>
+      <select id="incomeCategory">
+        <option value="" disabled selected>Selecciona una categoría</option>
+        <option value="Salario">Salario</option>
+        <option value="Inversiones">Inversiones</option>
+        <option value="Otros">Otros</option>
+      </select>
+    </div>
+    <div id="expenseMenu" style="display: none;">
+      <label for="expenseCategory">Categoría de Egreso</label>
+      <select id="expenseCategory">
+        <option value="" disabled selected>Selecciona una categoría</option>
+        <option value="Alimentos">Alimentos</option>
+        <option value="Transporte">Transporte</option>
+        <option value="Entretenimiento">Entretenimiento</option>
+        <option value="Otros">Otros</option>
+      </select>
+    </div>
+    <label for="amount">Monto</label>
+    <input type="number" id="amount" placeholder="Monto" required />
+    <button type="submit">Enviar</button>
+    <div id="popup"></div>
+  </form>
+  <script src="script.js"></script>
+</body>
+</html>

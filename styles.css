@@ -1,0 +1,226 @@
+/* General */
+body {
+    font-family: 'Poppins', sans-serif; /* Fuente moderna y limpia */
+    margin: 0;
+    padding: 0;
+    background-color: #f9f9f9; /* Suave tono pastel */
+    color: #333;
+    line-height: 1.6;
+  }
+  
+  /* Header */
+  header {
+    text-align: center;
+    background-color: #62b6cb; /* Azul pastel */
+    color: white;
+    padding: 20px 10px;
+    border-bottom: 5px solid #35858b; /* Línea decorativa */
+  }
+  
+  header h1 {
+    margin: 0;
+    font-size: 1.8rem;
+  }
+  
+  header h5 {
+    margin: 5px 0 0;
+    font-size: 1rem;
+    font-weight: 300;
+  }
+  
+  /* Formulario */
+  form {
+    max-width: 90%; /* Adaptable a pantallas pequeñas */
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #ffffff; /* Fondo blanco para contraste */
+    border-radius: 15px; /* Esquinas redondeadas */
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1); /* Sombra suave */
+  }
+  
+  /* Título del formulario */
+  form h2 {
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    text-align: center;
+    color: #555;
+  }
+  
+  /* Campos del formulario */
+  label {
+    display: block;
+    margin: 10px 0 5px;
+    font-weight: bold;
+    color: #555;
+  }
+  
+  input, select {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    font-size: 1rem;
+    border: 1px solid #ccc;
+    border-radius: 10px; /* Redondeado */
+    box-sizing: border-box;
+    background-color: #f0f8ff; /* Azul pastel claro */
+  }
+  
+  input:focus, select:focus {
+    outline: none;
+    border-color: #62b6cb; /* Azul pastel */
+    box-shadow: 0 0 5px rgba(98, 182, 203, 0.5);
+  }
+  
+  /* Botón */
+  button {
+    display: block;
+    width: 100%;
+    background-color: #62b6cb; /* Azul pastel */
+    color: white;
+    font-size: 1.2rem;
+    font-weight: bold;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    padding: 10px;
+    transition: background-color 0.3s, transform 0.2s;
+  }
+  
+  button:hover {
+    background-color: #35858b; /* Azul pastel más oscuro */
+    transform: scale(1.02); /* Pequeño efecto de zoom */
+  }
+  
+  /* Submenús dinámicos */
+  #incomeMenu, #expenseMenu {
+    display: none;
+  }
+  
+  /* Ajustes para pantallas pequeñas */
+  @media (max-width: 480px) {
+    header h1 {
+      font-size: 1.5rem;
+    }
+  
+    form {
+      padding: 15px;
+    }
+  
+    form h2 {
+      font-size: 1.3rem;
+    }
+  
+    input, select, button {
+      font-size: 0.9rem;
+      padding: 8px;
+    }
+  }
+
+  /* Splash Screen */
+#splashScreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #62b6cb; /* Fondo azul pastel */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  color: white;
+  font-family: 'Poppins', sans-serif;
+  font-size: 2rem;
+  z-index: 1000; /* Siempre encima */
+  transition: opacity 0.5s ease-in-out;
+}
+
+/* Popup de Confirmación/Error */
+#popup {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background-color: #62b6cb; /* Azul para confirmación */
+  color: white;
+  padding: 10px 20px;
+  border-radius: 10px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  font-family: 'Poppins', sans-serif;
+  font-size: 1rem;
+  z-index: 999; /* Encima del contenido principal */
+  display: none;
+  animation: fadeOut 3s forwards; /* Desaparece en 3 segundos */
+}
+
+/* Popup de Error */
+#popup.error {
+  background-color: #e63946; /* Rojo para errores */
+}
+
+/* Animación de desvanecimiento */
+@keyframes fadeOut {
+  0% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    display: none;
+  }
+}
+
+/* Splash Screen */
+#splashScreen {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: #62b6cb; /* Fondo azul pastel */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    color: white;
+    font-family: 'Poppins', sans-serif;
+    font-size: 2rem;
+    z-index: 1000; /* Siempre encima */
+    transition: opacity 0.5s ease-in-out;
+  }
+  
+  /* Popup de Confirmación/Error */
+  #popup {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #62b6cb; /* Azul para confirmación */
+    color: white;
+    padding: 10px 20px;
+    border-radius: 10px;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    font-family: 'Poppins', sans-serif;
+    font-size: 1rem;
+    z-index: 999; /* Encima del contenido principal */
+    display: none;
+    animation: fadeOut 3s forwards;
+  }
+  
+  #popup.error {
+    background-color: #e63946
+  }
+  
+  @keyframes fadeOut {
+    0% {
+      opacity: 1;
+    }
+    80% {
+      opacity: 1;
+    }
+    100% {
+      opacity: 0;
+      display: none;
+    }
+  }
+  
