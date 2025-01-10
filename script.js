@@ -109,11 +109,11 @@ document.getElementById('financeForm').addEventListener('submit', function (e) {
       popup.textContent = '¡Envío realizado con éxito!';
       popup.className = '';
       popup.style.display = 'block';
-
+    
       setTimeout(() => {
-        popup.style.display = 'none';
+        location.reload(); // Recargar la página
       }, 1200);
-    })
+    })    
     .catch((error) => {
       console.error("Error durante el envío:", error);
       popup.textContent = 'Error al enviar. Inténtalo nuevamente.';
