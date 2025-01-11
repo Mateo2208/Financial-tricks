@@ -19,53 +19,49 @@ function updatePaymentOptions() {
   const category = document.getElementById("category").value;
   const paymentTypeDiv = document.getElementById("paymentType");
   if (category) {
-      paymentTypeDiv.style.display = "block";
+    paymentTypeDiv.style.display = "block";
   } else {
-      paymentTypeDiv.style.display = "none";
+    paymentTypeDiv.style.display = "none";
   }
 }
 
 window.onload = function () {
-  const splashScreen = document.getElementById('splashScreen');
+  const splashScreen = document.getElementById("splashScreen");
   setTimeout(() => {
-      splashScreen.style.opacity = '0';
-      setTimeout(() => {
-          splashScreen.style.display = 'none';
-      }, 500);
+    splashScreen.style.opacity = "0";
+    setTimeout(() => {
+      splashScreen.style.display = "none";
+    }, 500);
   }, 1200);
 
-  const dateField = document.getElementById('date');
+  const dateField = document.getElementById("date");
   const now = new Date();
   const boliviaTime = new Date(now.getTime() - (now.getTimezoneOffset() + 240) * 60000);
   const year = boliviaTime.getFullYear();
-  const month = String(boliviaTime.getMonth() + 1).padStart(2, '0');
-  const day = String(boliviaTime.getDate()).padStart(2, '0');
-  
+  const month = String(boliviaTime.getMonth() + 1).padStart(2, "0");
+  const day = String(boliviaTime.getDate()).padStart(2, "0");
+
   const formattedDate = `${year}-${month}-${day}`;
   dateField.value = formattedDate;
 };
 
-document.getElementById('financeForm').addEventListener('submit', function (e) {
+document.getElementById("financeForm").addEventListener("submit", function (e) {
   e.preventDefault();
 
-  const popup = document.getElementById('popup');
-  const dateInput = document.getElementById('date').value;
-  const [year, month, day] = dateInput.split('-');
+  const popup = document.getElementById("popup");
+  const dateInput = document.getElementById("date").value;
+  const [year, month, day] = dateInput.split("-");
   const dateObj = new Date(Number(year), Number(month) - 1, Number(day));
-  const formattedDay = ('0' + dateObj.getDate()).slice(-2);
-  const formattedMonth = ('0' + (dateObj.getMonth() + 1)).slice(-2);
+  const formattedDay = ("0" + dateObj.getDate()).slice(-2);
+  const formattedMonth = ("0" + (dateObj.getMonth() + 1)).slice(-2);
   const formattedYear = dateObj.getFullYear();
   const formattedDate = `${formattedDay}/${formattedMonth}/${formattedYear}`;
 
-  console.log("Fecha original:", dateInput, "Fecha formateada:", formattedDate);
-
-  const author = document.getElementById('author').value;
-  const category = document.getElementById('category').value.toLowerCase();
-  const paymentMethod = document.getElementById('paymentMethod').value.toLowerCase();
-  const amount = parseFloat(document.getElementById('amount').value) || 0;
-  const glosa = document.getElementById('glosa').value || '';
-
-  console.log("Autor:",author, "Categoría:", category, "Método de pago:", paymentMethod, "Monto:", amount, "Glosa:", glosa);
+  const author = document.getElementById("author").value;
+  const category = document.getElementById("category").value.toLowerCase();
+  const paymentMethod = document.getElementById("paymentMethod").value.toLowerCase();
+  const amount = parseFloat(document.getElementById("amount").value) || 0;
+  const glosa = document.getElementById("glosa").value || "";
 
   const jsonBody = {
     fecha: formattedDate,
@@ -73,27 +69,26 @@ document.getElementById('financeForm').addEventListener('submit', function (e) {
     glosa: glosa,
   };
 
-  // Asignar valor a la categoría correspondiente
-  if (category === 'comida') {
-    if (paymentMethod === 'tarjeta') jsonBody.comida_tarjeta = amount;
-    if (paymentMethod === 'efectivo') jsonBody.comida_efectivo = amount;
-  } else if (category === 'movilidad') {
-    if (paymentMethod === 'tarjeta') jsonBody.movilidad_tarjeta = amount;
-    if (paymentMethod === 'efectivo') jsonBody.movilidad_efectivo = amount;
-  } else if (category === 'varios') {
-    if (paymentMethod === 'tarjeta') jsonBody.varios_tarjeta = amount;
-    if (paymentMethod === 'efectivo') jsonBody.varios_efectivo = amount;
-  } else if (category === 'servicios') {
-    if (paymentMethod === 'tarjeta') jsonBody.servicios_tarjeta = amount;
-    if (paymentMethod === 'efectivo') jsonBody.servicios_efectivo = amount;
+  if (category === "comida") {
+    if (paymentMethod === "tarjeta") jsonBody.comida_tarjeta = amount;
+    if (paymentMethod === "efectivo") jsonBody.comida_efectivo = amount;
+  } else if (category === "movilidad") {
+    if (paymentMethod === "tarjeta") jsonBody.movilidad_tarjeta = amount;
+    if (paymentMethod === "efectivo") jsonBody.movilidad_efectivo = amount;
+  } else if (category === "varios") {
+    if (paymentMethod === "tarjeta") jsonBody.varios_tarjeta = amount;
+    if (paymentMethod === "efectivo") jsonBody.varios_efectivo = amount;
+  } else if (category === "servicios") {
+    if (paymentMethod === "tarjeta") jsonBody.servicios_tarjeta = amount;
+    if (paymentMethod === "efectivo") jsonBody.servicios_efectivo = amount;
+  } else if (category === "servicios básicos") {
+    if (paymentMethod === "tarjeta") jsonBody.servicios_tarjeta = amount;
+    if (paymentMethod === "efectivo") jsonBody.servicios_efectivo = amount;
   }
 
-  console.log("Datos enviados al proxy:", jsonBody);
-
-  // Utilizar tu proxy personalizado
-  fetch('https://www.dolarbluebolivia.click/proxy/gsheet', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+  fetch("https://www.dolarbluebolivia.click/proxy/gsheet", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(jsonBody),
   })
     .then((response) => {
@@ -101,27 +96,27 @@ document.getElementById('financeForm').addEventListener('submit', function (e) {
       if (response.ok) {
         return response.json();
       } else {
-        throw new Error('Error en la respuesta del servidor');
+        throw new Error("Error en la respuesta del servidor");
       }
     })
-    .then(data => {
+    .then((data) => {
       console.log("Respuesta del servidor:", data);
-      popup.textContent = '¡Envío realizado con éxito!';
-      popup.className = '';
-      popup.style.display = 'block';
-    
+      popup.textContent = "¡Envío realizado con éxito!";
+      popup.className = "";
+      popup.style.display = "block";
+
       setTimeout(() => {
         location.reload(); // Recargar la página
       }, 1200);
-    })    
+    })
     .catch((error) => {
       console.error("Error durante el envío:", error);
-      popup.textContent = 'Error al enviar. Inténtalo nuevamente.';
-      popup.className = 'error';
-      popup.style.display = 'block';
+      popup.textContent = "Error al enviar. Inténtalo nuevamente.";
+      popup.className = "error";
+      popup.style.display = "block";
 
       setTimeout(() => {
-        popup.style.display = 'none';
+        popup.style.display = "none";
       }, 3000);
     });
 });
