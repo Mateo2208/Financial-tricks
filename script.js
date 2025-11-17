@@ -217,7 +217,7 @@ function handleFormSubmit(e) {
   jsonBody[fieldName] = amount;
 
   // Submit to API
-  fetch("https://www.dolarbluebolivia.click/proxy/gsheet", {
+  fetch("https://sheet.matsoto.dev/proxy/gsheet", {
     method: "POST",
     headers: { 
       "Content-Type": "application/json",
@@ -278,3 +278,4 @@ document.addEventListener('visibilitychange', function() {
     }
   }
 });
+
