@@ -21,7 +21,7 @@ function getBoliviaTime() {
 function updatePaymentOptions() {
   const category = document.getElementById("category").value;
   const paymentTypeDiv = document.getElementById("paymentType");
-  
+
   if (category) {
     paymentTypeDiv.style.display = "block";
     // Add animation
@@ -40,7 +40,7 @@ function showToast(type, title, message) {
   const toastIcon = document.getElementById('toastIcon');
   const toastTitle = document.getElementById('toastTitle');
   const toastMessage = document.getElementById('toastMessage');
-  
+
   // Configure toast based on type
   if (type === 'success') {
     toastIcon.className = 'fas fa-check-circle text-success me-2';
@@ -51,16 +51,16 @@ function showToast(type, title, message) {
     toastTitle.textContent = 'Error';
     toast.className = 'toast show';
   }
-  
+
   toastMessage.textContent = message;
-  
+
   // Show toast using Bootstrap
   const bsToast = new bootstrap.Toast(toast, {
     autohide: true,
     delay: type === 'success' ? 1500 : 4000
   });
   bsToast.show();
-  
+
   // Auto-reload on success
   if (type === 'success') {
     setTimeout(() => {
@@ -72,7 +72,7 @@ function showToast(type, title, message) {
 function setLoadingState(isLoading) {
   const submitBtn = document.querySelector('button[type="submit"]');
   const formElements = document.querySelectorAll('input, select, button');
-  
+
   if (isLoading) {
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enviando...';
     submitBtn.disabled = true;
@@ -91,13 +91,13 @@ function initializeDateSystem() {
   const dateDisplay = document.getElementById('dateDisplay');
   const dateInput = document.getElementById('dateInput');
   const changeDateBtn = document.getElementById('changeDateBtn');
-  
+
   let currentDate = getBoliviaTime();
   let isManualDate = false;
-  
+
   // Set initial date
   updateDateDisplay();
-  
+
   function updateDateDisplay() {
     if (isManualDate) {
       const selectedDate = new Date(dateInput.value + 'T00:00:00');
@@ -114,8 +114,8 @@ function initializeDateSystem() {
     }
     dateInput.value = formatDate(isManualDate ? new Date(dateInput.value + 'T00:00:00') : currentDate);
   }
-  
-  changeDateBtn.addEventListener('click', function() {
+
+  changeDateBtn.addEventListener('click', function () {
     if (isManualDate) {
       // Reset to current date
       isManualDate = false;
@@ -130,15 +130,15 @@ function initializeDateSystem() {
       updateDateDisplay();
     }
   });
-  
-  dateInput.addEventListener('change', function() {
+
+  dateInput.addEventListener('change', function () {
     if (this.value) {
       updateDateDisplay();
     }
   });
-  
+
   // Update current date every minute
-  setInterval(function() {
+  setInterval(function () {
     if (!isManualDate) {
       updateDateDisplay();
     }
@@ -151,40 +151,40 @@ function validateForm() {
   const category = document.getElementById("category").value;
   const paymentMethod = document.getElementById("paymentMethod").value;
   const amount = parseFloat(document.getElementById("amount").value);
-  
+
   if (!author) {
     showToast('error', 'Error', 'Selecciona el autor');
     return false;
   }
-  
+
   if (!category) {
     showToast('error', 'Error', 'Selecciona una categoría');
     return false;
   }
-  
+
   if (!paymentMethod) {
     showToast('error', 'Error', 'Selecciona método de pago');
     return false;
   }
-  
+
   if (!amount || amount <= 0) {
     showToast('error', 'Error', 'Ingresa un monto válido');
     return false;
   }
-  
+
   return true;
 }
 
 // ===== FORM SUBMISSION =====
 function handleFormSubmit(e) {
   e.preventDefault();
-  
+
   if (!validateForm()) {
     return;
   }
-  
+
   setLoadingState(true);
-  
+
   // Get form data
   const dateInput = document.getElementById("dateInput").value;
   const [year, month, day] = dateInput.split("-");
@@ -207,11 +207,11 @@ function handleFormSubmit(e) {
   // Map category and payment method to appropriate fields
   const categoryMap = {
     "comida": "comida",
-    "movilidad": "movilidad", 
+    "movilidad": "movilidad",
     "varios": "varios",
     "servicios básicos": "servicios"
   };
-  
+
   const categoryKey = categoryMap[category];
   const fieldName = `${categoryKey}_${paymentMethod}`;
   jsonBody[fieldName] = amount;
@@ -219,7 +219,7 @@ function handleFormSubmit(e) {
   // Submit to API
   fetch("https://sheet.matsoto.dev/proxy/gsheet", {
     method: "POST",
-    headers: { 
+    headers: {
       "Content-Type": "application/json",
       "Accept": "application/json"
     },
@@ -255,13 +255,13 @@ function initializeApp() {
       splashScreen.style.display = "none";
     }, 400);
   }, 1000);
-  
+
   // Initialize date system
   initializeDateSystem();
-  
+
   // Setup form submission
   document.getElementById("financeForm").addEventListener("submit", handleFormSubmit);
-  
+
   console.log('Finanzas App iniciada');
 }
 
@@ -269,7 +269,7 @@ function initializeApp() {
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 // Handle page visibility changes to update date
-document.addEventListener('visibilitychange', function() {
+document.addEventListener('visibilitychange', function () {
   if (!document.hidden) {
     // Page became visible, update date if using current date
     const changeDateBtn = document.getElementById('changeDateBtn');
