@@ -38,7 +38,7 @@ def proxy_gsheet():
             }), 400
         
         # Google Apps Script URL
-        gs_url = 'https://script.google.com/macros/s/AKfycbzwSeHcsMsqZqt6qcCFnWaQSHHnnh5-RWupo1IPRdpElM4vw8yK8isNDDBQl8NqS3Po/exec'
+        gs_url = 'https://script.google.com/macros/s/AKfycbxdPPe_elnl4UPfCy76ZWgCOuRDfW8ENAO9cZCRF31m1LMOuku80fdMxSqtu83xcdV6/exec'
         
         # Forward the request to Google Apps Script
         gs_response = requests.post(
