@@ -37,12 +37,9 @@ def proxy_gsheet():
                 'message': 'No data provided'
             }), 400
         
-        # Google Apps Script URL
-        gs_url = 'https://script.google.com/macros/s/AKfycbx1mcLQIt5cFTC_jKhSfj5ZXuMR3EIsBGPM_0Lx7Cms9q9WcCtnEhYGvUclOOr3fm6I/exec'
-        
         # Forward the request to Google Apps Script
         gs_response = requests.post(
-            gs_url,
+            GS_URL,
             json=data,
             headers={'Content-Type': 'application/json'},
             timeout=30  # 30 seconds timeout
@@ -73,6 +70,71 @@ def proxy_gsheet():
             'message': f'Internal server error: {str(e)}'
         }), 500
 
+# Google Apps Script URL (shared)
+GS_URL = 'https://script.google.com/macros/s/AKfycbx1mcLQIt5cFTC_jKhSfj5ZXuMR3EIsBGPM_0Lx7Cms9q9WcCtnEhYGvUclOOr3fm6I/exec'
+
+@app.route('/proxy/gsheet/batch', methods=['POST', 'OPTIONS'])
+def proxy_gsheet_batch():
+    """
+    Batch proxy endpoint for Google Sheets Apps Script
+    Accepts an array of entries and sends each one to the Google Apps Script
+    """
+    if request.method == 'OPTIONS':
+        response = jsonify({'status': 'ok'})
+        response.headers.add('Access-Control-Allow-Origin', '*')
+        response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Accept')
+        response.headers.add('Access-Control-Allow-Methods', 'POST, OPTIONS')
+        return response, 200
+
+    try:
+        data = request.get_json()
+
+        if not data or not isinstance(data, list):
+            return jsonify({
+                'status': 'error',
+                'message': 'Expected an array of entries'
+            }), 400
+
+        if len(data) > 50:
+            return jsonify({
+                'status': 'error',
+                'message': 'Maximum 50 entries per batch'
+            }), 400
+
+        results = []
+        errors = []
+
+        for i, entry in enumerate(data):
+            try:
+                gs_response = requests.post(
+                    GS_URL,
+                    json=entry,
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30
+                )
+                gs_response.raise_for_status()
+                results.append({'index': i, 'status': 'success', 'data': gs_response.json()})
+            except requests.exceptions.Timeout:
+                errors.append({'index': i, 'status': 'error', 'message': 'Timeout'})
+            except requests.exceptions.RequestException as e:
+                errors.append({'index': i, 'status': 'error', 'message': str(e)})
+
+        status_code = 200 if not errors else 207
+        return jsonify({
+            'status': 'partial' if errors else 'success',
+            'results': results,
+            'errors': errors,
+            'total': len(data),
+            'successful': len(results),
+            'failed': len(errors)
+        }), status_code
+
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'message': f'Internal server error: {str(e)}'
+        }), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
@@ -87,7 +149,8 @@ def index():
     return jsonify({
         'message': 'Financial Tricks API',
         'endpoints': {
-            '/proxy/gsheet': 'POST - Proxy to Google Sheets',
+            '/proxy/gsheet': 'POST - Proxy to Google Sheets (single)',
+            '/proxy/gsheet/batch': 'POST - Proxy to Google Sheets (batch)',
             '/health': 'GET - Health check'
         }
     }), 200

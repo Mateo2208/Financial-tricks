@@ -70,10 +70,10 @@
                 </label>
                 <select id="category" class="form-select" required onchange="updatePaymentOptions()">
                   <option value="" disabled selected>Seleccionar</option>
-                  <option value="Comida">Alimentación</option>
-                  <option value="Movilidad">Transporte</option>
-                  <option value="Varios">Compras</option>
-                  <option value="Servicios Básicos">Servicios</option>
+                  <option value="Comida">Comida 🍔🍟</option>
+                  <option value="Movilidad">Transporte 🚗🚌</option>
+                  <option value="Varios">Compras Varios 🛍️</option>
+                  <option value="Servicios Básicos">Servicios Basicos⚡💧</option>
                 </select>
               </div>
 
@@ -150,9 +150,34 @@
                 <input type="date" id="dateInput" class="form-control mt-1 small" style="display: none;" />
               </div>
 
+              <!-- Add to Queue Button -->
+              <div class="d-grid mb-2">
+                <button type="button" class="btn btn-outline-primary" id="addToQueueBtn">
+                  <i class="fas fa-plus me-1"></i>
+                  Nuevo ingreso
+                </button>
+              </div>
+
+              <!-- Queue Section -->
+              <div id="queueSection" style="display: none;">
+                <div class="queue-header">
+                  <span>
+                    <i class="fas fa-list me-1 text-primary"></i>
+                    Pendientes (<span id="queueCount">0</span>)
+                  </span>
+                  <button type="button" class="btn btn-sm text-danger p-0" id="clearQueueBtn">
+                    <i class="fas fa-trash-alt me-1"></i><small>Limpiar</small>
+                  </button>
+                </div>
+                <div id="queueList"></div>
+                <div class="queue-total">
+                  Total: $<span id="queueTotal">0.00</span>
+                </div>
+              </div>
+
               <!-- Submit Button -->
               <div class="d-grid">
-                <button type="submit" class="btn btn-primary">
+                <button type="submit" class="btn btn-primary" id="submitBtn">
                   <i class="fas fa-check me-1"></i>
                   Registrar
                 </button>
