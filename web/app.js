@@ -10,9 +10,11 @@ const COLOR_CAT = {
 const colorCat = c => COLOR_CAT[normalizar(c)] || 'var(--tinta-3)';
 // En la planilla las líneas están como las escribe ella (SUPERMERCADO); en la app se leen más cómodas
 const SIGLAS = new Set(['upsa', 'soat', 'tec', 'mn', 'bnb', 'bmsc', 'cjn', 'bu', 'd.', 'c.', 'lib.']);
+const PROPIOS = new Set(['ma.', 'nelfi', 'ever', 'cristo', 'rey', 'mateo', 'lucas', 'thais', 'kicks', 'outlander',
+  'gran', 'vitara', 'navi', 'creta', 'binance']);
 function bonito(t) {
   return String(t || '').toLowerCase().split(' ').map((w, i) => SIGLAS.has(w) ? w.toUpperCase()
-    : (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');
+    : (i === 0 || PROPIOS.has(w) ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');
 }
 // El valor es lo que se escribe en la columna Persona de la planilla
 const PERSONAS = [{ id: 'Ever', nombre: 'Ever' }, { id: 'Ma. Nelfi', nombre: 'Ma. Nelfi' }];
