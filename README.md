@@ -1,94 +1,61 @@
-# Financial Tricks - API Backend
+# Financial Tricks (QuickCash)
 
-## 📋 Descripción
-API Flask que funciona como proxy para enviar datos a Google Sheets Apps Script desde la aplicación web Financial Tricks.
+App web para registrar gastos diarios en una hoja de Google Sheets.
 
-## 🚀 Inicio Rápido
+- **Front** (`index.html`, `script.js`, `styles.css`): GitHub Pages, `https://mateo2208.github.io/Financial-tricks/`. Se publica solo al hacer push a `main`.
+- **API** (`app.py`): proxy Flask en `https://sheet.matsoto.dev` que reenvía cada registro al Apps Script de la hoja.
+- **Apps Script** (`apps-script/Code.gs`): escribe la fila en la hoja `GASTOS DIARIOS`. Vive en Google (Extensiones → Apps Script); el archivo del repo es la copia de referencia.
 
-### 1. Instalar dependencias
+## Configuración de la API
+
+La URL del Apps Script **no va en el código** (el repo es público y con ella cualquiera escribe en la hoja).
+Se lee de la variable de entorno `GS_URL` o del archivo `.gs_url` junto a `app.py` (ignorado por git):
+
+```bash
+echo 'https://script.google.com/macros/s/.../exec' > .gs_url
+```
+
+Local:
+
 ```bash
 pip install -r requirements.txt
+python app.py            # http://localhost:5000
 ```
 
-### 2. Ejecutar servidor
-```bash
-python app.py
-```
+Producción (VPS): servicio systemd `financialtricks`, gunicorn en `127.0.0.1:5001` detrás de nginx.
+`gunicorn.conf.py` sube el timeout a 90 s: Apps Script tarda 10-30 s por fila y el default de 30 s
+mataba al worker con la fila ya escrita. Para aplicar cambios de código: `kill -HUP <PID del master>`
+o `sudo systemctl restart financialtricks`. Cada llamada a Google queda en
+`journalctl -u financialtricks` con prefijo `[gs]` (duración y respuesta).
 
-El servidor estará disponible en `http://localhost:5000`
-
-## 📡 Endpoints Disponibles
+## Endpoints
 
 ### POST /proxy/gsheet
-Proxy que reenvía datos a Google Sheets Apps Script.
 
-**Ejemplo de payload:**
+Un registro. Payload:
+
 ```json
-{
-  "fecha": "23/11/2025",
-  "autor": "Mateo",
-  "glosa": "Almuerzo",
-  "comida_efectivo": 50
-}
+{ "fecha": "25/09/2026", "autor": "EVER", "glosa": "Almuerzo", "comida_efectivo": 50 }
 ```
 
-**Respuesta exitosa:**
-```json
-{
-  "status": "success",
-  "message": "Data saved to Google Sheets"
-}
-```
+El campo del monto es `<categoría>_<método>`: `comida`, `movilidad`, `varios`, `servicios` × `tarjeta`, `efectivo`.
+
+| Caso | HTTP | Cuerpo |
+|---|---|---|
+| Guardado | 200 | `{"status": "success", "success": true, "row": 123}` |
+| La hoja lo rechazó (p. ej. fecha que no está en la columna B) | 422 | `{"status": "error", "message": "Fecha no encontrada en columna B."}` |
+| Google no respondió en 55 s (puede haberse guardado igual) | 504 | `{"status": "error", "message": "..."}` |
+| Error de Google / de conexión | 502 | `{"status": "error", "message": "..."}` |
+| Sin datos | 400 | `{"status": "error", "message": "No data provided"}` |
+
+Ojo: el Apps Script responde siempre HTTP 200, también cuando falla (`{"error": "..."}`). La API lo traduce a los códigos de arriba.
+
+### POST /proxy/gsheet/batch
+
+Array de hasta 50 registros, enviados uno tras otro. Responde 200 o 207 con `results`, `errors`, `successful`, `failed`.
+El front ya no lo usa: manda la cola de a un registro para no pasar el timeout de nginx (60 s) y
+para sacar de la cola cada registro confirmado (así un reintento no duplica filas).
 
 ### GET /health
-Verifica el estado del servidor.
 
-**Respuesta:**
-```json
-{
-  "status": "healthy",
-  "message": "Financial Tricks API is running"
-}
-```
-
-### GET /
-Muestra información sobre los endpoints disponibles.
-
-## 🔧 Configuración
-
-El servidor está configurado para:
-- **Host:** `0.0.0.0` (acepta conexiones externas)
-- **Puerto:** `5000`
-- **CORS:** Habilitado para todas las peticiones `/proxy/*`
-- **Debug:** Activado (solo para desarrollo)
-
-## 🛡️ Características
-
-✅ Manejo de errores completo  
-✅ CORS configurado correctamente  
-✅ Timeout de 30 segundos para peticiones a Google Sheets  
-✅ Validación de datos de entrada  
-✅ Health check endpoint  
-
-## 📝 Notas
-
-- El servidor debe estar corriendo para que la aplicación web (`index.html`) funcione correctamente
-- Asegúrate de que el archivo `script.js` esté configurado para apuntar a `http://localhost:5000/proxy/gsheet`
-- Para producción, considera usar un servidor WSGI como Gunicorn o uWSGI
-
-## 🔗 Google Apps Script URL
-El proxy reenvía las peticiones a:
-```
-https://script.google.com/macros/s/AKfycbzwSeHcsMsqZqt6qcCFnWaQSHHnnh5-RWupo1IPRdpElM4vw8yK8isNDDBQl8NqS3Po/exec
-```
-
-## 🐛 Troubleshooting
-
-### Error de CORS
-Si ves errores de CORS en la consola del navegador, asegúrate de que el servidor Flask esté corriendo.
-
-### Timeout
-Si las peticiones tardan mucho, puede ser que Google Sheets esté ocupado. El timeout está configurado a 30 segundos.
-
-### Puerto ocupado
-Si el puerto 5000 está en uso, puedes cambiarlo en `app.py` modificando el parámetro `port`.
+`{"status": "healthy", "message": "Financial Tricks API is running"}`

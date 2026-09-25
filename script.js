@@ -12,10 +12,24 @@ function formatDisplayDate(date) {
   return `${day}/${month}`;
 }
 
+// Fecha y hora de Bolivia sin importar la zona horaria del dispositivo
 function getBoliviaTime() {
-  const now = new Date();
-  return new Date(now.getTime() - (now.getTimezoneOffset() + 240) * 60000);
+  const parts = {};
+  new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/La_Paz',
+    year: 'numeric', month: 'numeric', day: 'numeric',
+    hour: 'numeric', minute: 'numeric', hourCycle: 'h23'
+  }).formatToParts(new Date()).forEach(p => { parts[p.type] = Number(p.value); });
+  return new Date(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute);
 }
+
+function escapeHtml(text) {
+  return String(text).replace(/[&<>"']/g, c => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+  }[c]));
+}
+
+const API_URL = "https://sheet.matsoto.dev/proxy/gsheet";
 
 // ===== QUEUE MANAGEMENT =====
 let entryQueue = [];
@@ -146,11 +160,11 @@ function updateQueueUI() {
     queueList.innerHTML = entryQueue.map((entry, i) => `
       <div class="queue-item">
         <div class="queue-item-info">
-          <span class="queue-item-category">${entry.display.category}</span>
+          <span class="queue-item-category">${escapeHtml(entry.display.category)}</span>
           <span class="queue-item-separator">·</span>
-          <span class="queue-item-method">${entry.display.paymentMethod}</span>
+          <span class="queue-item-method">${escapeHtml(entry.display.paymentMethod)}</span>
           <span class="queue-item-amount">$${entry.display.amount.toFixed(2)}</span>
-          ${entry.display.glosa ? `<span class="queue-item-glosa">${entry.display.glosa}</span>` : ''}
+          ${entry.display.glosa ? `<span class="queue-item-glosa">${escapeHtml(entry.display.glosa)}</span>` : ''}
         </div>
         <button type="button" class="queue-item-remove" onclick="removeFromQueue(${i})">
           <i class="fas fa-times"></i>
@@ -215,7 +229,7 @@ function showToast(type, title, message, autoReload = true) {
 function setLoadingState(isLoading) {
   const submitBtn = document.getElementById('submitBtn');
   const addBtn = document.getElementById('addToQueueBtn');
-  const formElements = document.querySelectorAll('#financeForm input, #financeForm select');
+  const formElements = document.querySelectorAll('#financeForm input, #financeForm select, #financeForm .queue-item-remove, #clearQueueBtn');
 
   if (isLoading) {
     submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Enviando...';
@@ -231,6 +245,9 @@ function setLoadingState(isLoading) {
 }
 
 // ===== DATE MANAGEMENT =====
+// Se asigna en initializeDateSystem: vuelve a poner la fecha de hoy si no se eligió una a mano
+let refreshDate = () => {};
+
 function initializeDateSystem() {
   const dateDisplay = document.getElementById('dateDisplay');
   const dateInput = document.getElementById('dateInput');
@@ -278,11 +295,13 @@ function initializeDateSystem() {
     }
   });
 
-  setInterval(function () {
+  refreshDate = function () {
     if (!isManualDate) {
       updateDateDisplay();
     }
-  }, 60000);
+  };
+
+  setInterval(refreshDate, 60000);
 }
 
 // ===== FORM VALIDATION =====
@@ -329,69 +348,82 @@ function handleFormSubmit(e) {
   }
 }
 
+// Envía una fila. Resuelve solo si la hoja confirmó el registro; si no, rechaza
+// con el mensaje del servidor (fecha no encontrada, timeout de Google, etc.).
+async function sendEntry(payload) {
+  let response;
+  try {
+    response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json"
+      },
+      body: JSON.stringify(payload),
+    });
+  } catch (err) {
+    throw new Error('Sin conexión con el servidor. Intenta de nuevo.');
+  }
+
+  let data = null;
+  try {
+    data = await response.json();
+  } catch (err) {
+    // nginx devuelve HTML en sus propios errores (502/504)
+  }
+
+  if (!response.ok || !data || data.status !== 'success') {
+    throw new Error((data && data.message) || `Error del servidor (${response.status}). Intenta de nuevo.`);
+  }
+  return data;
+}
+
 function submitSingle(payload) {
   setLoadingState(true);
 
-  fetch("https://sheet.matsoto.dev/proxy/gsheet", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify(payload),
-  })
-    .then(response => {
-      if (response.ok) return response.json();
-      throw new Error(`Error: ${response.status}`);
-    })
-    .then(data => {
+  sendEntry(payload)
+    .then(() => {
       setLoadingState(false);
       showToast('success', 'Éxito', 'Registrado correctamente');
     })
     .catch(error => {
       console.error("Error:", error);
       setLoadingState(false);
-      showToast('error', 'Error', 'Error de conexión. Intenta de nuevo.', false);
+      showToast('error', 'Error', error.message, false);
     });
 }
 
-function submitBatch() {
+// Manda la cola de a una fila (cada una tarda ~10-30 s en Google). Cada fila
+// confirmada sale de la cola al instante, así un reintento no la duplica.
+async function submitBatch() {
   setLoadingState(true);
-  const payloads = entryQueue.map(e => e.payload);
+  const submitBtn = document.getElementById('submitBtn');
+  const pending = entryQueue.slice();
+  const total = pending.length;
+  let ok = 0;
+  let lastError = '';
 
-  fetch("https://sheet.matsoto.dev/proxy/gsheet/batch", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Accept": "application/json"
-    },
-    body: JSON.stringify(payloads),
-  })
-    .then(response => {
-      if (response.ok || response.status === 207) return response.json();
-      throw new Error(`Error: ${response.status}`);
-    })
-    .then(data => {
-      setLoadingState(false);
-      if (data.failed > 0) {
-        // Keep only failed items in queue
-        const failedIndices = new Set(data.errors.map(e => e.index));
-        entryQueue = entryQueue.filter((_, i) => failedIndices.has(i));
-        saveQueueToStorage();
-        updateQueueUI();
-        showToast('error', 'Parcial', `${data.successful} de ${data.total} registrados. ${data.failed} fallaron.`, false);
-      } else {
-        entryQueue = [];
-        saveQueueToStorage();
-        updateQueueUI();
-        showToast('success', 'Éxito', `${data.total} registro${data.total > 1 ? 's' : ''} enviado${data.total > 1 ? 's' : ''} correctamente`);
-      }
-    })
-    .catch(error => {
+  for (let i = 0; i < total; i++) {
+    submitBtn.innerHTML = `<i class="fas fa-spinner fa-spin me-1"></i>Enviando ${i + 1} de ${total}...`;
+    try {
+      await sendEntry(pending[i].payload);
+      ok++;
+      entryQueue = entryQueue.filter(e => e !== pending[i]);
+      saveQueueToStorage();
+    } catch (error) {
       console.error("Error batch:", error);
-      setLoadingState(false);
-      showToast('error', 'Error', 'Error de conexión. Intenta de nuevo.', false);
-    });
+      lastError = error.message;
+    }
+  }
+
+  setLoadingState(false);
+
+  if (ok === total) {
+    showToast('success', 'Éxito', `${total} registro${total > 1 ? 's' : ''} enviado${total > 1 ? 's' : ''} correctamente`);
+  } else {
+    const failed = total - ok;
+    showToast('error', 'Parcial', `${ok} de ${total} registrados. ${failed} quedaron en pendientes. ${lastError}`, false);
+  }
 }
 
 // ===== INITIALIZATION =====
@@ -426,10 +458,9 @@ function initializeApp() {
 document.addEventListener('DOMContentLoaded', initializeApp);
 
 document.addEventListener('visibilitychange', function () {
+  // Al volver a la app (p. ej. al día siguiente) la fecha pasa a la de hoy.
+  // Antes se re-inicializaba todo y se acumulaban listeners e intervalos.
   if (!document.hidden) {
-    const changeDateBtn = document.getElementById('changeDateBtn');
-    if (changeDateBtn && changeDateBtn.classList.contains('btn-outline-secondary')) {
-      initializeDateSystem();
-    }
+    refreshDate();
   }
 });
