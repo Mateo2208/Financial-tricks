@@ -76,6 +76,16 @@ BOLIVIA = timezone(timedelta(hours=-4))
 CATEGORIAS = ['comida', 'movilidad', 'varios', 'servicios']
 METODOS = ['tarjeta', 'efectivo']
 CAMPOS = [f'{c}_{m}' for c in CATEGORIAS for m in METODOS]  # orden de las columnas D:K
+# La planilla cierra cada mes con una fila de totales cuyo "autor" es el nombre del mes:
+# no es un gasto, sumarla duplica el total.
+MESES = {'ENERO', 'FEBRERO', 'MARZO', 'ABRIL', 'MAYO', 'JUNIO', 'JULIO', 'AGOSTO',
+         'SEPTIEMBRE', 'SETIEMBRE', 'OCTUBRE', 'NOVIEMBRE', 'DICIEMBRE'}
+
+
+def normalizar_autor(autor):
+    """'EVER ', 'Ever' -> 'EVER'; 'MA.NELFI' -> 'MA. NELFI' (en la hoja hay de todo)."""
+    a = ' '.join(str(autor or '').upper().split())
+    return a.replace('MA.NELFI', 'MA. NELFI')
 
 
 def log(msg):
@@ -91,7 +101,7 @@ class SheetError(Exception):
         self.status_code = status_code
 
 
-def call_sheet(body, tag):
+def call_sheet(body, tag, reintentar=False):
     """
     Llama al Apps Script y devuelve su respuesta si salió bien.
     El Apps Script responde siempre HTTP 200, también cuando falla ({"error": "..."}),
@@ -126,6 +136,11 @@ def call_sheet(body, tag):
     try:
         data = gs_response.json()
     except ValueError:
+        # A veces Google responde su página "Script function not found: doGet" a un POST
+        # válido. En lecturas se repite una vez; una escritura nunca (podría duplicar).
+        if reintentar:
+            log(f"{tag} respuesta no JSON, reintento")
+            return call_sheet(body, tag, reintentar=False)
         raise SheetError('Google Sheets devolvió una respuesta inesperada', 502)
 
     if not isinstance(data, dict) or data.get('error') or not data.get('success'):
@@ -154,7 +169,7 @@ def leer_mes(mes):
         hit = _cache.get(mes)
         if hit and now - hit[0] < RESUMEN_TTL:
             return hit[1]
-    data = call_sheet({'accion': 'resumen', 'mes': mes}, f"resumen mes={mes}")
+    data = call_sheet({'accion': 'resumen', 'mes': mes}, f"resumen mes={mes}", reintentar=True)
     filas = data.get('filas') or []
     with _cache_lock:
         _cache[mes] = (now, filas)
@@ -176,6 +191,9 @@ def armar_resumen(mes, filas):
     movimientos = []
 
     for f in filas:
+        autor = normalizar_autor(f.get('autor'))
+        if autor in MESES or autor.startswith('TOTAL'):
+            continue
         montos = []
         for x in (f.get('montos') or [])[:8]:
             try:
@@ -193,13 +211,13 @@ def armar_resumen(mes, filas):
                 movimientos.append({
                     'fila': f.get('fila'),
                     'fecha': f.get('fecha'),
-                    'autor': f.get('autor') or '',
+                    'autor': autor,
                     'categoria': c,
                     'metodo': m,
                     'monto': round(v, 2),
                     'glosa': f.get('glosa') or '',
                 })
-        por_autor[f.get('autor') or 'Sin autor'] += total_fila
+        por_autor[autor or 'Sin autor'] += total_fila
         por_dia[f.get('fecha')] += total_fila
 
     def clave_fecha(s):
