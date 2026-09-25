@@ -537,3 +537,5 @@ button { cursor: pointer; }
 .cuadra { margin-top: 10px; }
 .cuadra-total { padding-top: 8px; border-top: 1px solid var(--borde); font-weight: 700; }
 .cuadra-total.descuadre strong { color: var(--pend); }
+
+.cifras.dos { grid-template-columns: 1fr 1fr; }

@@ -30,8 +30,9 @@ const local = {
 const nf0 = new Intl.NumberFormat('es-BO', { maximumFractionDigits: 0 });
 const nf2 = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 function numTxt(n) { const v = Math.round((Number(n) || 0) * 100) / 100; return Number.isInteger(v) ? nf0.format(v) : nf2.format(v); }
-const bs = n => (Number(n) < 0 ? `-Bs ${numTxt(-n)}` : `Bs ${numTxt(n)}`);
-const usd = n => (Number(n) < 0 ? `-$ ${numTxt(-n)}` : `$ ${numTxt(n)}`);
+// Espacio que no se parte: "Bs 45" nunca queda en dos líneas
+const bs = n => (Number(n) < 0 ? `-Bs\u00a0${numTxt(-n)}` : `Bs\u00a0${numTxt(n)}`);
+const usd = n => (Number(n) < 0 ? `-$\u00a0${numTxt(-n)}` : `$\u00a0${numTxt(n)}`);
 const enMoneda = (n, moneda) => moneda === 'USD' ? usd(n) : bs(n);
 
 function escapeHtml(text) {
@@ -744,7 +745,7 @@ function pintarSaldos(s) {
       <p class="total-texto-arriba">Ahorro real</p>
       <p class="total-monto"><span class="moneda">$</span>${escapeHtml(numTxt(s.ahorro_real_usd))}</p>
       <p class="total-texto">Todo en dólares ${escapeHtml(usd(s.todo_usd))}, menos el diezmo ${escapeHtml(usd(s.diezmo_usd))}.</p>
-      <div class="cifras">
+      <div class="cifras dos">
         <div><span>En bolivianos</span><strong class="num">${escapeHtml(bs(s.total_bs))}</strong></div>
         <div><span>En dólares</span><strong class="num">${escapeHtml(usd(s.total_usd))}</strong></div>
         <div><span>Dólar banco</span><strong class="num">${escapeHtml(nf2.format(s.tc_oficial))}</strong></div>

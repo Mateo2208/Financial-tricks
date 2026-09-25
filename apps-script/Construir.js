@@ -225,11 +225,8 @@ function hojaReporte_(ss, anio, saldoInicial) {
   const sh = ss.getSheetByName(H_.reporte);
   base_(sh, 12 * 36 + 10, 10);
   tituloHoja_(sh, 2, 2, 8, "REPORTE DE INGRESOS Y EGRESOS - GESTIÓN " + anio);
-  sh.getRange("B3:C3").merge().setValue("Efectivo en casa al 1 de enero").setFontColor(C_.gris);
-  sh.getRange("D3").setValue(saldoInicial).setNumberFormat(F_NUM).setBackground(C_.mes);
-  bordes_(sh.getRange("B3:D3"));
+
   let fila = 5;
-  let saldoPrev = "$D$3";
   const G = `'${H_.gastos}'`;
   const grupos = [];
   const dvC = SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName(H_.config).getRange("L2:L40"), true).setAllowInvalid(true).build();
@@ -241,7 +238,7 @@ function hojaReporte_(ss, anio, saldoInicial) {
     sh.getRange(e1, 3, 2, 1).merge().setValue("CONCEPTO DEL INGRESO");
     sh.getRange(e1, 4, 1, 2).merge().setValue("INGRESOS");
     sh.getRange(e1, 6, 1, 2).merge().setValue("EGRESOS");
-    sh.getRange(e1, 8, 2, 1).merge().setValue("SALDO EFECTIVO");
+    sh.getRange(e1, 8, 2, 1).merge().setValue("RESULTADO DEL DÍA");
     sh.getRange(e1, 9, 2, 1).merge().setValue("CUENTA DEL INGRESO");
     sh.getRange(e1 + 1, 4, 1, 4).setValues([["EFECTIVO", "BANCO", "EFECTIVO", "BANCO"]]);
     const enc = sh.getRange(e1, 2, 2, 8);
@@ -256,7 +253,7 @@ function hojaReporte_(ss, anio, saldoInicial) {
       fechas.push([new Date(anio, m - 1, d)]);
       const ef = ["E", "G", "I", "K"].map(L => `SUMIFS(${G}!${L}:${L};${G}!B:B;B${r})`).join("+");
       const bk = ["D", "F", "H", "J"].map(L => `SUMIFS(${G}!${L}:${L};${G}!B:B;B${r})`).join("+");
-      formulas.push([`=${ef}`, `=${bk}`, `=${d === 1 ? saldoPrev : "H" + (r - 1)}+D${r}-F${r}`]);
+      formulas.push([`=${ef}`, `=${bk}`, `=D${r}+E${r}-F${r}-G${r}`]);
     }
     sh.getRange(d0, 2, n, 1).setValues(fechas).setNumberFormat(F_FECHA);
     sh.getRange(d0, 6, n, 3).setFormulas(formulas);
@@ -266,10 +263,9 @@ function hojaReporte_(ss, anio, saldoInicial) {
     const t = d0 + n;
     sh.getRange(t, 2, 1, 2).merge().setValue("TOTAL " + MESES_[m - 1]);
     sh.getRange(t, 4, 1, 5).setFormulas([[`=SUM(D${d0}:D${t - 1})`, `=SUM(E${d0}:E${t - 1})`, `=SUM(F${d0}:F${t - 1})`,
-      `=SUM(G${d0}:G${t - 1})`, `=H${t - 1}`]]).setNumberFormat(F_NUM);
+      `=SUM(G${d0}:G${t - 1})`, `=SUM(H${d0}:H${t - 1})`]]).setNumberFormat(F_NUM);
     estiloTotal_(sh.getRange(t, 2, 1, 8));
     grupos.push([e1, t - e1]);
-    saldoPrev = "H" + (t - 1);
     fila = t + 2;
   }
   [[1, 16], [2, 92], [3, 230], [4, 100], [5, 100], [6, 100], [7, 100], [8, 110], [9, 190], [10, 80]]
@@ -279,7 +275,7 @@ function hojaReporte_(ss, anio, saldoInicial) {
   grupos.forEach(([r, n]) => sh.getRange(r, 1, n, 1).shiftRowGroupDepth(1));
   const finde = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($B1);WEEKDAY($B1;2)>5)')
     .setFontColor(C_.gris).setRanges([sh.getRange("B1:B")]).build();
-  sh.setConditionalFormatRules([finde]);
+  sh.setConditionalFormatRules([finde]);  // sin rojo diario: gastar un día sin cobrar es lo normal
   sh.hideColumns(10);
   sh.setTabColor(C_.totalTexto);
 }
@@ -425,7 +421,7 @@ function hojaPresupuesto_(ss, anio, catalogo) {
     const r0 = Math.min(...Object.values(real)), p0 = Math.min(...Object.values(pres));
     const n = Object.keys(real).length;
     reglas.push(SpreadsheetApp.newConditionalFormatRule()
-      .whenFormulaSatisfied(`=AND(N(D${r0})>0;N(D${r0})>N(OFFSET(D${r0};${p0 - r0};0)))`)
+      .whenFormulaSatisfied(`=AND(N(OFFSET(D${r0};${p0 - r0};0))>0;N(D${r0})>N(OFFSET(D${r0};${p0 - r0};0)))`)
       .setBackground(C_.rojoFondo).setFontColor(C_.rojoTexto).setRanges([sh.getRange(r0, 4, n, 12)]).build());
   });
   sh.setConditionalFormatRules(reglas);
