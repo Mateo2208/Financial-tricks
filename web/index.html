@@ -13,7 +13,7 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="/app.css?v=1">
+  <link rel="stylesheet" href="/app.css?v=2">
 </head>
 <body>
   <!-- Íconos (Lucide, ISC) -->
@@ -124,6 +124,8 @@
           </button>
         </form>
 
+        <p id="anotando" class="anotando" role="status" hidden><i aria-hidden="true"></i><span></span></p>
+
         <section id="pendientes" class="pendientes" hidden aria-labelledby="t-pendientes">
           <div class="pendientes-cabeza">
             <h2 id="t-pendientes" class="seccion-titulo">Por registrar</h2>
@@ -160,6 +162,6 @@
 
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="/app.js?v=1" defer></script>
+  <script src="/app.js?v=2" defer></script>
 </body>
 </html>

@@ -388,3 +388,7 @@ button { cursor: pointer; }
 @media (prefers-color-scheme: dark) {
   .categoria input:checked + span { background: color-mix(in srgb, var(--c) 18%, var(--bg)); }
 }
+
+/* Registros aceptados que la hoja todavía está anotando */
+.anotando { display: flex; align-items: center; gap: 10px; margin: 16px 0 0; color: var(--tinta-2); font-size: 14px; }
+.anotando i { width: 8px; height: 8px; border-radius: 50%; background: var(--pend); animation: latido 1.2s ease-in-out infinite; }

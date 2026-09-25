@@ -3,3 +3,4 @@ __pycache__/
 .gs_url
 .env
 *.bak-*
+datos/

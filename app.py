@@ -1,4 +1,5 @@
 import os
+import re
 import secrets
 import threading
 import time
@@ -10,6 +11,8 @@ import requests
 from flask import Flask, request, jsonify, session, send_from_directory
 from flask_cors import CORS
 from werkzeug.security import check_password_hash
+
+import cola
 
 BASE = Path(__file__).resolve().parent
 WEB = BASE / 'web'
@@ -157,30 +160,63 @@ def send_to_sheet(entry, tag):
 
 # ===== Resumen (lectura) =====
 
-_cache = {}
-_cache_lock = threading.Lock()
-RESUMEN_TTL = 120  # s; cada escritura invalida el mes que tocó
+RESUMEN_FRESCO = 120  # s; más viejo que esto se muestra igual y se refresca por detrás
+_refrescando = set()
+_refrescando_lock = threading.Lock()
 
 
-def leer_mes(mes):
-    """Filas crudas de un mes ('MM/AAAA') desde el Apps Script, con caché corta."""
-    now = time.time()
-    with _cache_lock:
-        hit = _cache.get(mes)
-        if hit and now - hit[0] < RESUMEN_TTL:
-            return hit[1]
+def leer_de_google(mes):
+    """Filas crudas de un mes ('MM/AAAA') desde el Apps Script; guarda la caché compartida."""
+    t0 = time.time()
     data = call_sheet({'accion': 'resumen', 'mes': mes}, f"resumen mes={mes}", reintentar=True)
     filas = data.get('filas') or []
-    with _cache_lock:
-        _cache[mes] = (now, filas)
-    return filas
+    cola.cache_guardar(mes, filas, t0)
+    return filas, t0
 
 
-def invalidar_mes(fecha):
-    """fecha 'dd/MM/yyyy' -> borra la caché de ese mes."""
-    if isinstance(fecha, str) and len(fecha) == 10:
-        with _cache_lock:
-            _cache.pop(fecha[3:], None)
+def _refrescar(mes):
+    try:
+        leer_de_google(mes)
+    except Exception as e:
+        log(f"refresco resumen {mes} falló: {e!r}")
+    finally:
+        with _refrescando_lock:
+            _refrescando.discard(mes)
+
+
+def filas_del_mes(mes):
+    """
+    Devuelve (filas, ts, actualizando). Si hay copia se responde al instante con ella y, si
+    está vieja o la hoja cambió, se refresca en segundo plano (el celular vuelve a pedir).
+    """
+    ts, filas, vencido = cola.cache_leer(mes)
+    if filas is None:
+        filas, ts = leer_de_google(mes)
+        return filas, ts, False
+    if vencido or time.time() - ts > RESUMEN_FRESCO:
+        with _refrescando_lock:
+            lanzar = mes not in _refrescando
+            _refrescando.add(mes)
+        if lanzar:
+            threading.Thread(target=_refrescar, args=(mes,), daemon=True).start()
+        return filas, ts, True
+    return filas, ts, False
+
+
+def filas_de_la_cola(mes, ts, filas):
+    """Registros aceptados que la copia del resumen todavía no incluye."""
+    ya = {f.get('fila') for f in filas}
+    extra = []
+    for r in cola.del_mes_sin_confirmar(mes, ts):
+        if r['estado'] == 'hecho' and r['fila'] in ya:
+            continue
+        p = r['payload']
+        extra.append({
+            'fila': None, 'fecha': p.get('fecha'), 'autor': p.get('autor', ''), 'glosa': p.get('glosa', ''),
+            'montos': [p.get(k, 0) or 0 for k in CAMPOS],
+            'anotando': r['estado'] != 'hecho',
+        })
+    return extra
 
 
 def armar_resumen(mes, filas):
@@ -190,6 +226,7 @@ def armar_resumen(mes, filas):
     por_dia = defaultdict(float)
     movimientos = []
 
+    anotando = 0
     for f in filas:
         autor = normalizar_autor(f.get('autor'))
         if autor in MESES or autor.startswith('TOTAL'):
@@ -216,7 +253,9 @@ def armar_resumen(mes, filas):
                     'metodo': m,
                     'monto': round(v, 2),
                     'glosa': f.get('glosa') or '',
+                    'anotando': bool(f.get('anotando')),
                 })
+        anotando += 1 if f.get('anotando') else 0
         por_autor[autor or 'Sin autor'] += total_fila
         por_dia[f.get('fecha')] += total_fila
 
@@ -237,6 +276,7 @@ def armar_resumen(mes, filas):
         'autores': {a: round(v, 2) for a, v in sorted(por_autor.items(), key=lambda x: -x[1])},
         'dias': {d: round(v, 2) for d, v in sorted(por_dia.items(), key=lambda x: clave_fecha(x[0]))},
         'movimientos': movimientos,
+        'anotando': anotando,
     }
 
 
@@ -296,23 +336,42 @@ def api_logout():
 
 # ===== API de la app =====
 
+ID_VALIDO = re.compile(r'^[A-Za-z0-9-]{8,64}$')
+
+
 @app.route('/api/registro', methods=['POST'])
 def api_registro():
+    """
+    Acepta el registro y responde al instante (202); el envío a la hoja lo hace la cola.
+    El id lo genera el celular: si reintenta el mismo registro, no se duplica.
+    """
     if (r := requiere_sesion()):
         return r
     data = request.get_json(silent=True)
     if not isinstance(data, dict) or not data.get('fecha'):
         return jsonify({'status': 'error', 'message': 'Faltan datos del registro'}), 400
+    id_registro = str(data.get('id') or '')
+    if not ID_VALIDO.match(id_registro):
+        return jsonify({'status': 'error', 'message': 'Falta el id del registro'}), 400
+    try:
+        datetime.strptime(str(data['fecha']), '%d/%m/%Y')
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Fecha inválida'}), 400
     # Solo los campos que entiende la hoja
     entry = {k: data[k] for k in ['fecha', 'autor', 'glosa', *CAMPOS] if k in data}
-    try:
-        result = send_to_sheet(entry, 'registro')
-    except SheetError as e:
-        if e.status_code == 504:
-            invalidar_mes(entry.get('fecha'))
-        return jsonify({'status': 'error', 'message': e.message}), e.status_code
-    invalidar_mes(entry.get('fecha'))
-    return jsonify({'status': 'success', 'row': result.get('row')})
+    if not any(float(entry.get(k) or 0) > 0 for k in CAMPOS):
+        return jsonify({'status': 'error', 'message': 'Falta el monto'}), 400
+    cola.encolar(id_registro, entry)
+    return jsonify({'status': 'success', 'id': id_registro, 'estado': 'pendiente'}), 202
+
+
+@app.route('/api/registros', methods=['GET'])
+def api_registros():
+    """Estado de registros encolados: ?ids=a,b,c"""
+    if (r := requiere_sesion()):
+        return r
+    ids = [i for i in (request.args.get('ids') or '').split(',') if ID_VALIDO.match(i)][:100]
+    return jsonify({'status': 'success', 'registros': cola.estados(ids)})
 
 
 @app.route('/api/resumen', methods=['GET'])
@@ -325,10 +384,13 @@ def api_resumen():
     except ValueError:
         return jsonify({'status': 'error', 'message': 'Mes inválido (MM/AAAA)'}), 400
     try:
-        filas = leer_mes(mes)
+        filas, ts, actualizando = filas_del_mes(mes)
     except SheetError as e:
         return jsonify({'status': 'error', 'message': e.message}), e.status_code
-    return jsonify(armar_resumen(mes, filas))
+    resumen = armar_resumen(mes, filas + filas_de_la_cola(mes, ts, filas))
+    resumen['leido'] = int(ts)
+    resumen['actualizando'] = actualizando
+    return jsonify(resumen)
 
 
 # ===== Front (financial.matsoto.dev) =====
@@ -389,7 +451,7 @@ def proxy_gsheet():
             'message': f'Internal server error: {str(e)}'
         }), 500
 
-    invalidar_mes(data.get('fecha'))
+    cola.cache_vencer(str(data.get('fecha', ''))[3:])
     return jsonify({'status': 'success', **result}), 200
 
 
@@ -420,7 +482,7 @@ def proxy_gsheet_batch():
         try:
             result = send_to_sheet(entry, f"batch {i + 1}/{len(data)}")
             results.append({'index': i, 'status': 'success', 'data': result})
-            invalidar_mes(entry.get('fecha'))
+            cola.cache_vencer(str(entry.get('fecha', ''))[3:])
         except SheetError as e:
             errors.append({'index': i, 'status': 'error', 'message': e.message})
         except Exception as e:
@@ -445,6 +507,10 @@ def health_check():
         'status': 'healthy',
         'message': 'Financial Tricks API is running'
     }), 200
+
+
+# El enviador de la cola arranca con cada proceso; solo uno toma el lock y envía
+cola.arrancar_enviador(send_to_sheet, SheetError, log)
 
 
 if __name__ == '__main__':

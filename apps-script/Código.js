@@ -5,6 +5,8 @@
 //    git). Sin él la URL /exec sola no alcanza para leer ni escribir la hoja.
 //  - accion "resumen": devuelve las filas de un mes de GASTOS DIARIOS (solo lectura).
 //  - Sin accion: registra un gasto (lógica original de la hoja).
+//  - id_registro: el servidor reintenta tras un timeout; CacheService recuerda los ids
+//    escritos (6 h) para que el reintento no duplique la fila.
 //  - LockService: si dos personas registran a la vez, la segunda espera a que termine
 //    la primera en vez de insertar y combinar celdas sobre la misma fila.
 //  - C:L se escribe en una sola llamada (setValues): respuesta más rápida.
@@ -73,6 +75,15 @@ function registrar_(params) {
   }
 
   try {
+    // Reintento de un registro ya escrito (el servidor no supo la respuesta): no duplicar.
+    // Dentro del lock, así dos intentos simultáneos del mismo id no pasan los dos.
+    const idRegistro = String(params.id_registro || "");
+    const cache = CacheService.getScriptCache();
+    if (idRegistro) {
+      const previa = cache.get("reg_" + idRegistro);
+      if (previa) return json_({ success: true, row: Number(previa), repetido: true });
+    }
+
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const sheet = ss.getSheetByName("GASTOS DIARIOS");
     if (!sheet) {
@@ -165,6 +176,7 @@ function registrar_(params) {
     sheet.getRange(targetRow, COL_TOTAL).setFormula(`=SUM(D${targetRow}:K${targetRow})`);
 
     SpreadsheetApp.flush();
+    if (idRegistro) cache.put("reg_" + idRegistro, String(targetRow), 21600); // 6 h
     return json_({ success: true, row: targetRow });
 
   } catch (err) {

@@ -203,7 +203,7 @@ function actualizarBoton() {
 function armarRegistro(f) {
   const payload = { fecha: f.fecha, autor: local.get('qc_autor', AUTORES[0].id), glosa: f.glosa };
   payload[`${f.categoria}_${f.metodo}`] = f.monto;
-  return { id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, payload, ...f, estado: 'lista', auto: false };
+  return { id: nuevoId(), payload, ...f, estado: 'lista', auto: false };
 }
 
 function limpiarFormulario() {
@@ -230,23 +230,18 @@ async function registrar(e) {
   enviando = true;
   const btn = $('#btn-registrar');
   btn.disabled = true;
-  btn.textContent = 'Registrando…';
+  btn.textContent = 'Guardando…';
   try {
-    await api('/api/registro', { method: 'POST', body: JSON.stringify(reg.payload) });
+    await enviarAlServidor(reg);
     const input = $('#monto');
     input.classList.add('registrado');
     setTimeout(() => { input.classList.remove('registrado'); limpiarFormulario(); }, 420);
-    toast(`Registrado: ${bs(f.monto)} en ${CAT[f.categoria].nombre}`);
-    resumenCache.delete(f.fecha.slice(3));
+    toast(`Guardado: ${bs(f.monto)} en ${CAT[f.categoria].nombre}`);
   } catch (err) {
-    if (err.sinRed) {
+    if (err.sinRed || err.status >= 500) {
       guardarPendiente({ ...reg, auto: true });
       limpiarFormulario();
       toast('Sin señal: quedó guardado en el celular y se envía solo.', 'offline');
-    } else if (err.status === 504) {
-      guardarPendiente({ ...reg, estado: 'dudoso' });
-      limpiarFormulario();
-      toast('La planilla tardó demasiado. Quedó en "Por registrar": revisá la hoja antes de reenviar.', 'error');
     } else if (err.status !== 401) {
       toast(err.message, 'error');
     }
@@ -263,6 +258,62 @@ function agregarALista() {
   limpiarFormulario();
   $('#monto').focus();
   toast(`Agregado a la lista: ${bs(f.monto)}`);
+}
+
+// ===== Envío: el servidor acepta al instante y anota en la hoja por detrás =====
+function nuevoId() {
+  const r = crypto.getRandomValues ? Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('')
+    : Math.random().toString(16).slice(2, 14);
+  return `${Date.now().toString(36)}-${r}`;
+}
+
+async function enviarAlServidor(reg) {
+  await api('/api/registro', { method: 'POST', body: JSON.stringify({ ...reg.payload, id: reg.id }) });
+  const { auto, estado, error, ...guardar } = reg;
+  local.set('qc_seguimiento', [...local.get('qc_seguimiento', []).filter(x => x.id !== reg.id), guardar]);
+  resumenCache.delete(reg.fecha.slice(3));
+  pintarAnotando();
+  seguir();
+}
+
+let seguimientoTimer = null;
+function seguir(demora = 2500) {
+  clearTimeout(seguimientoTimer);
+  if (local.get('qc_seguimiento', []).length) seguimientoTimer = setTimeout(revisarSeguimiento, demora);
+}
+
+async function revisarSeguimiento() {
+  const lista = local.get('qc_seguimiento', []);
+  if (!lista.length || !navigator.onLine) { seguir(5000); return; }
+  let r;
+  try {
+    r = await api(`/api/registros?ids=${lista.map(x => x.id).join(',')}`);
+  } catch { seguir(8000); return; }
+  const porId = Object.fromEntries(r.registros.map(x => [x.id, x]));
+  const siguen = [];
+  let errores = 0;
+  for (const reg of lista) {
+    const e = porId[reg.id];
+    if (!e) continue;                    // el servidor no lo conoce: nada que seguir
+    if (e.estado === 'hecho') { resumenCache.delete(reg.fecha.slice(3)); continue; }
+    if (e.estado === 'error') {
+      errores++;
+      guardarPendiente({ ...reg, id: nuevoId(), estado: 'lista', auto: false, error: `La planilla lo rechazó: ${e.error}` });
+      continue;
+    }
+    siguen.push(reg);
+  }
+  local.set('qc_seguimiento', siguen);
+  pintarAnotando();
+  if (errores) toast(`${errores === 1 ? 'Un gasto no se pudo anotar' : `${errores} gastos no se pudieron anotar`}. Está en "Por registrar".`, 'error');
+  seguir(siguen.length ? 3000 : 0);
+}
+
+function pintarAnotando() {
+  const n = local.get('qc_seguimiento', []).length;
+  const el = $('#anotando');
+  el.hidden = n === 0;
+  el.querySelector('span').textContent = n === 1 ? 'Anotando 1 gasto en la planilla…' : `Anotando ${n} gastos en la planilla…`;
 }
 
 // ===== Pendientes (lista y registros sin señal) =====
@@ -328,31 +379,32 @@ async function enviarLista(soloAutomaticos = false, soloId = null) {
   let ok = 0, ultimoError = '';
   for (let i = 0; i < cola.length; i++) {
     const p = cola[i];
-    btn.textContent = `Registrando ${i + 1} de ${cola.length}…`;
+    btn.textContent = `Guardando ${i + 1} de ${cola.length}…`;
     try {
-      await api('/api/registro', { method: 'POST', body: JSON.stringify(p.payload) });
+      // Un reintento de algo "dudoso" (versión anterior) va con id nuevo a propósito:
+      // el usuario ya revisó la hoja y eligió reenviar.
+      await enviarAlServidor(p.estado === 'dudoso' ? { ...p, id: nuevoId() } : p);
       ok++;
-      resumenCache.delete(p.fecha.slice(3));
       guardarPendientes(pendientes().filter(x => x.id !== p.id));
     } catch (err) {
       if (err.status === 401) break;
       ultimoError = err.message;
       guardarPendientes(pendientes().map(x => x.id !== p.id ? x : {
-        ...x, estado: err.status === 504 ? 'dudoso' : 'lista', error: err.sinRed ? '' : err.message,
+        ...x, estado: 'lista', error: err.sinRed ? '' : err.message,
       }));
-      if (err.sinRed) break;
+      if (err.sinRed || err.status >= 500) break;
     }
   }
   enviandoLista = false;
   pintarPendientes();
   if (ok === cola.length) {
-    toast(ok === 1 ? 'Registrado en la planilla' : `${ok} gastos registrados en la planilla`);
+    toast(ok === 1 ? 'Guardado' : `${ok} gastos guardados`);
   } else if (!soloAutomaticos || ok > 0) {
     toast(`${ok} de ${cola.length} registrados. ${ultimoError}`, 'error');
   }
 }
 
-function enviarAutomaticos() { if (navigator.onLine) enviarLista(true); }
+function enviarAutomaticos() { if (navigator.onLine) { enviarLista(true); seguir(0); } }
 
 function pintarConexion() {
   $('#aviso-offline').hidden = navigator.onLine;
@@ -375,15 +427,24 @@ async function cargarResumen(forzar = false) {
   const cuerpo = $('#resumen-cuerpo');
 
   const guardado = !forzar && resumenCache.get(clave);
-  if (guardado) { pintarResumen(guardado, esMesActual); return; }
+  if (guardado && !guardado.actualizando) { pintarResumen(guardado, esMesActual); return; }
 
-  cuerpo.innerHTML = '<div class="esqueleto" aria-label="Cargando"><i></i><i></i><i></i><i></i></div>';
+  // Lo último que vio este celular se muestra al instante mientras llega lo nuevo
+  const copia = guardado || local.get(`qc_resumen_${clave}`, null);
+  if (copia) pintarResumen(copia, esMesActual);
+  else cuerpo.innerHTML = '<div class="esqueleto" aria-label="Cargando"><i></i><i></i><i></i><i></i></div>';
   try {
     const data = await api(`/api/resumen?mes=${encodeURIComponent(clave)}`);
     resumenCache.set(clave, data);
     local.set(`qc_resumen_${clave}`, data);
     if (claveMes(mesVista) === clave) pintarResumen(data, esMesActual);
+    // El servidor respondió con su copia y está leyendo la hoja: volver a pedir en un rato
+    if (data.actualizando && intentosActualizar < 4) {
+      intentosActualizar++;
+      setTimeout(() => { if (claveMes(mesVista) === clave && !$('#vista-resumen').hidden) cargarResumen(true); }, 3500);
+    } else intentosActualizar = 0;
   } catch (err) {
+    if (copia && claveMes(mesVista) === clave) return; // queda la copia a la vista
     if (err.status === 401 || claveMes(mesVista) !== clave) return;
     const viejo = local.get(`qc_resumen_${clave}`, null);
     if (viejo) {
@@ -402,6 +463,7 @@ async function cargarResumen(forzar = false) {
 }
 
 let movimientosVisibles = 30;
+let intentosActualizar = 0;
 
 function pintarResumen(r, esMesActual) {
   const cuerpo = $('#resumen-cuerpo');
@@ -473,7 +535,7 @@ function pintarResumen(r, esMesActual) {
           <ul class="filas">
             ${d.items.map(m => {
               const c = CAT[m.categoria];
-              const meta = [m.glosa, autorNombre(m.autor), METODO_NOMBRE[m.metodo]].filter(Boolean).map(escapeHtml).join(', ');
+              const meta = [m.anotando ? 'Anotando en la planilla…' : '', m.glosa, autorNombre(m.autor), METODO_NOMBRE[m.metodo]].filter(Boolean).map(escapeHtml).join(', ');
               return `
                 <li class="fila" style="--c:${c.color}">
                   <span class="punto" aria-hidden="true"></span>
@@ -612,6 +674,7 @@ async function iniciar() {
   }
   pintarFecha();
   pintarPendientes();
+  pintarAnotando();
   pintarConexion();
   actualizarBoton();
 
