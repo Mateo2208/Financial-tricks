@@ -1,0 +1,5 @@
+**/.*
+**/.*/**
+deploy.sh
+*.md
+Volcado.js

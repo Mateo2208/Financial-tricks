@@ -27,6 +27,9 @@ function doPost(e) {
   if (params.accion === "resumen") {
     return resumen_(params);
   }
+  if (params.accion === "volcado" && typeof volcado_ === "function") {
+    return volcado_(params);  // solo existe en pruebas (Volcado.js)
+  }
   return registrar_(params);
 }
 

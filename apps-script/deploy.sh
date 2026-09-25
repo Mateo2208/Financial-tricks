@@ -21,11 +21,13 @@ else
   echo "Falta .secreto.$DEST.js"; exit 1
 fi
 trap 'rm -f Secreto.js' EXIT
+# En prod no va Volcado.js (lectura completa de planillas: solo para análisis en pruebas)
+IGNORAR=""; [ "$DEST" = prod ] && IGNORAR="-I $PWD/.claspignore.prod"
 
-clasp -P "$PWD/.clasp.$DEST.json" push --force
+clasp -P "$PWD/.clasp.$DEST.json" $IGNORAR push --force
 if [ -f ".deployment-id.$DEST" ]; then
-  clasp -P "$PWD/.clasp.$DEST.json" deploy -i "$(cat .deployment-id.$DEST)" -d "$MSG"
+  clasp -P "$PWD/.clasp.$DEST.json" $IGNORAR deploy -i "$(cat .deployment-id.$DEST)" -d "$MSG"
 else
-  clasp -P "$PWD/.clasp.$DEST.json" deploy -d "$MSG" | tee /dev/stderr | grep -oE 'AKfyc[A-Za-z0-9_-]+' | head -1 > ".deployment-id.$DEST"
+  clasp -P "$PWD/.clasp.$DEST.json" $IGNORAR deploy -d "$MSG" | tee /dev/stderr | grep -oE 'AKfyc[A-Za-z0-9_-]+' | head -1 > ".deployment-id.$DEST"
   echo "Nueva implementación: https://script.google.com/macros/s/$(cat .deployment-id.$DEST)/exec"
 fi
