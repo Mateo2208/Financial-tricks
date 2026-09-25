@@ -16,16 +16,15 @@ const H_ = { resumen: "RESUMEN", presupuesto: "PRESUPUESTO MENSUAL", gastos: "GA
   saldos: "SALDOS", config: "CONFIG" };
 
 // Colores de la planilla de siempre
+// Identidad "sobrio azul marino" (compartida con la app): marino en títulos y encabezados, grises
+// azulados de base, un solo acento dorado (lo elegido/destacado) y rojo solo para alertas.
 const C_ = {
-  titulo: "#e26b0a", amarillo: "#ffff66", totalFondo: "#fce4d6", totalTexto: "#1f4e9a",
-  borde: "#a6a6a6", encabezado: "#f2f2f2", mes: "#fff2cc", texto: "#000000", gris: "#7f7f7f",
-  rojoFondo: "#f4cccc", rojoTexto: "#990000", verdeFondo: "#d9ead3",
-  cat: {
-    "SERVICIOS BÁSICOS": "#fff2cc", "MOVILIDAD": "#fde9d9", "ALIMENTACIÓN": "#ddebf7", "VARIOS": "#e2efda",
-    "CHICOS": "#fce4ec", "CONSULTORIO": "#f3e1fa", "EDUCACIÓN": "#fff9e6", "IMPUESTOS": "#e7eef7",
-    "COMPRAS GRANDES": "#eceff1", "OTROS": "#f3f3f3",
-  },
-  col: { COMIDA: "#ddebf7", TRANSPORTE: "#fde9d9", "COMPRAS VARIOS": "#e2efda", "SERVICIOS BÁSICOS": "#fff2cc" },
+  marino: "#1f2a44", marino2: "#2e3b5b", dorado: "#c9a227", doradoSuave: "#f6edcf",
+  titulo: "#1f2a44", amarillo: "#e3e8f1", totalFondo: "#eef1f6", totalTexto: "#1f2a44",
+  borde: "#c9d0dc", encabezado: "#e3e8f1", mes: "#f6edcf", texto: "#1b2230", gris: "#5b6475",
+  rojoFondo: "#f8e1df", rojoTexto: "#b3261e", verdeFondo: "#e4efe8", tarjeta: "#ffffff",
+  cat: new Proxy({}, { get: () => "#f3f5f9" }),  // grupos en un gris azulado parejo: sobrio
+  col: { COMIDA: "#e3e8f1", TRANSPORTE: "#d6ddea", "COMPRAS VARIOS": "#e3e8f1", "SERVICIOS BÁSICOS": "#d6ddea" },
 };
 const F_BS = '"Bs"#,##0.00;"-Bs"#,##0.00;""';
 const F_USD = '"$us "#,##0.00;"-$us "#,##0.00;""';
@@ -91,14 +90,14 @@ function bordes_(r) {
 function base_(sh, filas, cols) {
   if (sh.getMaxRows() < filas) sh.insertRowsAfter(sh.getMaxRows(), filas - sh.getMaxRows());
   if (sh.getMaxColumns() < cols) sh.insertColumnsAfter(sh.getMaxColumns(), cols - sh.getMaxColumns());
-  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).setFontFamily("Arial").setFontSize(10)
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).setFontFamily("Inter").setFontSize(10)
     .setVerticalAlignment("middle");
 }
 
 function tituloHoja_(sh, fila, col, ancho, texto) {
-  sh.getRange(fila, col, 1, ancho).merge().setValue(texto).setFontSize(14).setFontWeight("bold")
-    .setFontColor(C_.titulo).setHorizontalAlignment("center").setBackground(C_.encabezado);
-  sh.setRowHeight(fila, 34);
+  sh.getRange(fila, col, 1, ancho).merge().setValue("  " + texto).setFontSize(14).setFontWeight("bold")
+    .setFontColor("#ffffff").setHorizontalAlignment("left").setBackground(C_.marino);
+  sh.setRowHeight(fila, 40);
 }
 
 function congelar_(sh, filas, cols) {
@@ -117,6 +116,7 @@ function columnaLetra_(c) {
 function estiloTotal_(r) {
   r.setFontWeight("bold").setFontColor(C_.totalTexto).setBackground(C_.totalFondo);
   bordes_(r);
+  r.setBorder(true, null, null, null, null, null, C_.marino, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
 }
 
 // ===== CONFIG (oculta) =====
@@ -161,9 +161,10 @@ function hojaGastos_(ss, anio) {
   sh.getRange("O3:O4").merge().setValue("CUENTA");
   sh.getRange("P3:P4").merge().setValue("ID");
   const enc = sh.getRange("B3:P4");
-  enc.setFontWeight("bold").setHorizontalAlignment("center").setWrap(true);
+  enc.setFontWeight("bold").setHorizontalAlignment("center").setWrap(true).setFontColor(C_.marino);
   sh.getRange("B3:C4").setBackground(C_.encabezado); sh.getRange("L3:P4").setBackground(C_.encabezado);
   bordes_(enc);
+  enc.setBorder(null, null, true, null, null, null, C_.marino, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   // Total de la gestión (fila 5)
   sh.getRange("B5:C5").merge().setValue("TOTAL GESTIÓN " + anio);
   for (let c = 4; c <= 11; c++) {
@@ -176,7 +177,8 @@ function hojaGastos_(ss, anio) {
   for (let m = 1; m <= 12; m++) {
     // "AGOSTO 2026" solo lo convierte Google en la fecha 1/8/2026: por eso "GASTOS DE AGOSTO 2026"
     sh.getRange(fila, 2, 1, 14).merge().setValue("GASTOS DE " + MESES_[m - 1] + " " + anio).setFontWeight("bold")
-      .setBackground(C_.amarillo).setHorizontalAlignment("left");
+      .setBackground(C_.marino2).setFontColor("#ffffff").setHorizontalAlignment("left");
+    sh.setRowHeight(fila, 26);
     const vacia = fila + 1;
     formatoFilaGasto_(sh, vacia);
     const total = fila + 2;
@@ -200,7 +202,7 @@ function hojaGastos_(ss, anio) {
   sh.setRowGroupControlPosition(SpreadsheetApp.GroupControlTogglePosition.BEFORE);
   grupos.forEach(r => sh.getRange(r, 1, 1, 1).shiftRowGroupDepth(1));
   sh.hideColumns(16);
-  sh.setTabColor(C_.titulo);
+  sh.setTabColor(C_.marino2);
 }
 
 // Formato, listas y bordes de una fila de gasto (también al insertar desde la app)
@@ -232,7 +234,8 @@ function hojaReporte_(ss, anio, saldoInicial) {
   const dvC = SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName(H_.config).getRange("L2:L40"), true).setAllowInvalid(true).build();
   for (let m = 1; m <= 12; m++) {
     sh.getRange(fila, 2, 1, 8).merge().setValue("REPORTE DE " + MESES_[m - 1] + " " + anio).setFontWeight("bold")
-      .setBackground(C_.amarillo);
+      .setBackground(C_.marino2).setFontColor("#ffffff");
+    sh.setRowHeight(fila, 26);
     const e1 = fila + 1;
     sh.getRange(e1, 2, 2, 1).merge().setValue("FECHA");
     sh.getRange(e1, 3, 2, 1).merge().setValue("CONCEPTO DEL INGRESO");
@@ -277,7 +280,7 @@ function hojaReporte_(ss, anio, saldoInicial) {
     .setFontColor(C_.gris).setRanges([sh.getRange("B1:B")]).build();
   sh.setConditionalFormatRules([finde]);  // sin rojo diario: gastar un día sin cobrar es lo normal
   sh.hideColumns(10);
-  sh.setTabColor(C_.totalTexto);
+  sh.setTabColor(C_.marino2);
 }
 
 // ===== SALDOS =====
@@ -311,9 +314,10 @@ function hojaSaldos_(ss, cuentas) {
     const fila = Object.keys(etiquetas).find(k => etiquetas[k] === c[1]);
     if (fila) sh.getRange(Number(fila), 5).setValue(c[5]);
   });
-  sh.getRange(F.fecha, 2, 1, 4).setFontWeight("bold").setBackground(C_.amarillo);
-  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground("#dce6f1"));
-  [F.bsEnUsd, F.general, F.ahorro].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground(C_.amarillo));
+  sh.getRange(F.fecha, 2, 1, 4).setFontWeight("bold").setBackground(C_.marino2).setFontColor("#ffffff");
+  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground(C_.totalFondo));
+  [F.bsEnUsd, F.general].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground(C_.totalFondo));
+  sh.getRange(F.ahorro, 2, 1, 3).setFontWeight("bold").setBackground(C_.doradoSuave);
   [F.tcOficial, F.tcParalelo].forEach(f => sh.getRange(f, 2, 1, 3).setFontColor(C_.gris));
   sh.getRange(F.bs0, 2, F.ahorroPeriodo - F.bs0 + 1, 4).setWrap(true);
   sh.getRange(F.bs0, 5, F.ahorroPeriodo - F.bs0 + 1, 1).setFontColor(C_.gris).setHorizontalAlignment("center");
@@ -321,7 +325,7 @@ function hojaSaldos_(ss, cuentas) {
   for (let c = 6; c <= 60; c++) sh.setColumnWidth(c, 112);
   congelar_(sh, 2, 5);
   bordesEtiquetasSaldos_(sh);
-  sh.setTabColor("#38761d");
+  sh.setTabColor(C_.marino2);
 }
 
 // Fórmulas y formatos de una columna de SALDOS (al importar y cuando la app agrega una revisión)
@@ -340,15 +344,16 @@ function formatoColumnaSaldos_(sh, col) {
   sh.getRange(F.general, col).setFormula(`=IFERROR(${L}${F.bsEnUsd}+${L}${F.totalUsd};"")`);
   sh.getRange(F.ahorro, col).setFormula(`=IFERROR(${L}${F.general}-N(${L}${F.diezmoUsd});"")`);
   if (P) sh.getRange(F.ahorroPeriodo, col).setFormula(`=IFERROR(${L}${F.ahorro}-${P}${F.ahorro};"")`);
-  sh.getRange(F.fecha, col).setNumberFormat(F_FECHA).setFontWeight("bold").setBackground(C_.amarillo).setHorizontalAlignment("center");
+  sh.getRange(F.fecha, col).setNumberFormat(F_FECHA).setFontWeight("bold").setBackground(C_.marino2).setFontColor("#ffffff").setHorizontalAlignment("center");
   sh.getRange(F.bs0, col, F.bsMenos - F.bs0 + 1, 1).setNumberFormat(F_BS);
   sh.getRange(F.diezmoBs, col).setNumberFormat(F_BS);
   sh.getRange(F.tcOficial, col, 2, 1).setNumberFormat("0.00").setFontColor(C_.gris);
-  sh.getRange(F.bsEnUsd, col).setNumberFormat(F_USD).setFontWeight("bold").setBackground(C_.amarillo);
+  sh.getRange(F.bsEnUsd, col).setNumberFormat(F_USD).setFontWeight("bold").setBackground(C_.totalFondo);
   sh.getRange(F.usd0, col, F.totalUsd - F.usd0 + 1, 1).setNumberFormat(F_USD);
   [F.general, F.diezmoUsd, F.ahorro, F.ahorroPeriodo].forEach(f => sh.getRange(f, col).setNumberFormat(F_USD));
-  [F.general, F.ahorro].forEach(f => sh.getRange(f, col).setFontWeight("bold").setBackground(C_.amarillo));
-  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, col).setFontWeight("bold").setBackground("#dce6f1"));
+  sh.getRange(F.general, col).setFontWeight("bold").setBackground(C_.totalFondo);
+  sh.getRange(F.ahorro, col).setFontWeight("bold").setBackground(C_.doradoSuave);
+  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, col).setFontWeight("bold").setBackground(C_.totalFondo));
   bordesColumna_(sh, col, 1);
 }
 
@@ -375,7 +380,7 @@ function hojaPresupuesto_(ss, anio, catalogo) {
     tituloHoja_(sh, fila, 2, 15, titulo);
     const enc = fila + 2;
     sh.getRange(enc, 2, 1, 15).setValues([["", "", ...MESES_, "TOTAL"]]).setFontWeight("bold").setHorizontalAlignment("center");
-    sh.getRange(enc, 4, 1, 13).setBackground(C_.amarillo);
+    sh.getRange(enc, 4, 1, 13).setBackground(C_.amarillo).setFontColor(C_.marino);
     bordes_(sh.getRange(enc, 2, 1, 15));
     let r = enc + 1;
     const inicio = r;
@@ -385,7 +390,7 @@ function hojaPresupuesto_(ss, anio, catalogo) {
       if (gActual === null) return;
       const rg = sh.getRange(g0, 2, hasta - g0 + 1, 1);
       if (hasta > g0) rg.merge();
-      rg.setValue(gActual).setFontWeight("bold").setFontColor(C_.titulo).setHorizontalAlignment("center").setWrap(true);
+      rg.setValue(gActual).setFontWeight("bold").setFontColor(C_.marino).setHorizontalAlignment("center").setWrap(true);
       sh.getRange(g0, 2, hasta - g0 + 1, 2).setBackground(C_.cat[gActual] || C_.cat.OTROS);
     };
     lineas.forEach(([g, l]) => {
@@ -427,7 +432,7 @@ function hojaPresupuesto_(ss, anio, catalogo) {
   sh.setConditionalFormatRules(reglas);
   [[1, 16], [2, 130], [3, 190]].forEach(([c, w]) => sh.setColumnWidth(c, w));
   for (let c = 4; c <= 16; c++) sh.setColumnWidth(c, 104);
-  sh.setTabColor("#e69138");
+  sh.setTabColor(C_.marino2);
   // Dónde quedó cada línea (para cargar el presupuesto y para la app)
   const cfg = ss.getSheetByName(H_.config);
   const mapa = [];
@@ -458,9 +463,9 @@ function hojaResumen_(ss, anio, catalogo, f) {
   sh.getRange("B4").setValue("MES").setFontWeight("bold").setHorizontalAlignment("right");
   const mes = sh.getRange("C4");
   mes.setValue(MESES_[Number(Utilities.formatDate(new Date(), "America/La_Paz", "M")) - 1])
-    .setFontWeight("bold").setFontSize(12).setBackground(C_.amarillo).setHorizontalAlignment("center");
+    .setFontWeight("bold").setFontSize(12).setBackground(C_.doradoSuave).setFontColor(C_.marino).setHorizontalAlignment("center");
   mes.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInRange(cfg.getRange("AF2:AF13"), true).build());
-  bordes_(mes);
+  mes.setBorder(true, true, true, true, null, null, C_.dorado, SpreadsheetApp.BorderStyle.SOLID_MEDIUM);
   // Ayudantes (columna Z, oculta): mes, inicio, fin, día de corte, ¿es el mes en curso?
   sh.getRange("Z1:Z5").setFormulas([
     [`=MATCH($C$4;${C}!$AF$2:$AF$13;0)`], [`=DATE(${anio};$Z$1;1)`], [`=EOMONTH($Z$2;0)`],
@@ -477,7 +482,8 @@ function hojaResumen_(ss, anio, catalogo, f) {
     sh.getRange(7, col).setFormula(formula).setFontSize(15).setFontWeight("bold").setNumberFormat(formato);
     if (nota) sh.getRange(8, col).setFormula(nota).setFontSize(9).setFontColor(C_.gris);
     const caja = sh.getRange(6, col, 3, 1);
-    caja.setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground("#fafafa");
+    caja.setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground(C_.tarjeta);
+    sh.getRange(6, col).setBorder(true, null, null, null, null, null, C_.marino, SpreadsheetApp.BorderStyle.SOLID_THICK);
   };
   tarjeta(2, "GASTADO", "=" + gastado, F_BS, `=IF(${presMes}>0;TEXT(${gastado}/${presMes};"0%")&" del presupuesto";"")`);
   tarjeta(3, "PRESUPUESTO DEL MES", "=" + presMes, F_BS);
@@ -496,11 +502,11 @@ function hojaResumen_(ss, anio, catalogo, f) {
     `=IF($Z$5;"Gastado hasta hoy "&TEXT(${gastado};"#,##0")&" + lo que se suele gastar del "&($Z$4+1)&" a fin de mes ("&TEXT($Z$6;"#,##0")&", promedio de los 3 meses anteriores)"&IF(${presMes}>0;". Quedaría en "&TEXT((${gastado}+$Z$6)/${presMes};"0%")&" del presupuesto.";".");"El mes ya terminó: es el gasto final.")`)
     .setWrap(true).setFontColor(C_.gris).setVerticalAlignment("middle");
   sh.setRowHeight(11, 40);
-  sh.getRange("B10:F11").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground("#fafafa");
+  sh.getRange("B10:F11").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground(C_.tarjeta);
 
   // Por categoría (sale de las tablas de PRESUPUESTO: presupuesto y gastado de verdad)
   const r0 = 14;
-  sh.getRange(r0 - 1, 2).setValue("POR CATEGORÍA").setFontWeight("bold").setFontColor(C_.titulo);
+  sh.getRange(r0 - 1, 2).setValue("POR CATEGORÍA").setFontWeight("bold").setFontColor(C_.marino).setFontSize(11);
   sh.getRange(r0, 2, 1, 6).setValues([["CATEGORÍA", "PRESUPUESTO", "GASTADO", "QUEDA", "USO", ""]])
     .setFontWeight("bold").setBackground(C_.amarillo).setHorizontalAlignment("center");
   sh.getRange(r0, 6, 1, 2).merge();
@@ -508,9 +514,9 @@ function hojaResumen_(ss, anio, catalogo, f) {
   catalogo.grupos.forEach(([g, ls]) => {
     const pres = ls.map(([l]) => (f.pm[l] || f.pa[l]) ? `INDEX(${P}!$D$1:$O$400;${f.pm[l] || f.pa[l]};$Z$1)` : null).filter(Boolean);
     const real = ls.map(([l]) => (f.rm[l] || f.ra[l]) ? `INDEX(${P}!$D$1:$O$400;${f.rm[l] || f.ra[l]};$Z$1)` : null).filter(Boolean);
-    sh.getRange(r, 2).setValue(g).setFontWeight("bold").setFontColor(C_.titulo).setBackground(C_.cat[g] || C_.cat.OTROS);
+    sh.getRange(r, 2).setValue(g).setFontWeight("bold").setFontColor(C_.marino).setBackground(C_.cat[g] || C_.cat.OTROS);
     sh.getRange(r, 3, 1, 3).setFormulas([["=" + pres.join("+"), "=" + real.join("+"), `=C${r}-D${r}`]]);
-    sh.getRange(r, 6).setFormula(`=IF(C${r}>0;SPARKLINE(MIN(D${r}/C${r};1);{"charttype"\\"bar";"max"\\1;"color1"\\IF(D${r}>C${r};"#c0392b";"#e26b0a")});IF(D${r}>0;"sin presupuesto";""))`);
+    sh.getRange(r, 6).setFormula(`=IF(C${r}>0;SPARKLINE(MIN(D${r}/C${r};1);{"charttype"\\"bar";"max"\\1;"color1"\\IF(D${r}>C${r};"#b3261e";"#1f2a44")});IF(D${r}>0;"sin presupuesto";""))`);
     sh.getRange(r, 7).setFormula(`=IF(C${r}>0;D${r}/C${r};"")`).setNumberFormat("0%").setHorizontalAlignment("right");
     r++;
   });
@@ -532,8 +538,8 @@ function hojaResumen_(ss, anio, catalogo, f) {
   sh.getRange("I7:J7").merge().setFormula("=" + ultimo(SF.ahorro)).setFontSize(15).setFontWeight("bold").setNumberFormat(F_USD);
   sh.getRange("I8:L8").merge().setFormula(`="al "&TEXT(${ultimo(SF.fecha)};"dd/mm/yyyy")&"   "&IF(${ultimo(SF.ahorroPeriodo)}>=0;"+";"")&TEXT(${ultimo(SF.ahorroPeriodo)};"#,##0")&" $us desde la revisión anterior"`)
     .setFontSize(9).setFontColor(C_.gris);
-  sh.getRange("K6:L7").merge().setFormula(`=SPARKLINE(${S}!$F$${SF.ahorro}:$ZZ$${SF.ahorro};{"charttype"\\"line";"color"\\"#1f4e9a";"linewidth"\\2})`);
-  sh.getRange("I6:L8").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground("#fafafa");
+  sh.getRange("K6:L7").merge().setFormula(`=SPARKLINE(${S}!$F$${SF.ahorro}:$ZZ$${SF.ahorro};{"charttype"\\"line";"color"\\"#1f2a44";"linewidth"\\2})`);
+  sh.getRange("I6:L8").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground(C_.tarjeta);
 
   // ¿Cuadran los saldos? Entre las dos últimas revisiones: cambio de la plata en Bs contra lo anotado
   sh.getRange("I10:L11").merge().setValue("¿CUADRAN LOS SALDOS?\nEntre las dos últimas revisiones, en bolivianos")
@@ -554,13 +560,13 @@ function hojaResumen_(ss, anio, catalogo, f) {
   sh.getRange("I17:L17").setFontWeight("bold");
   sh.getRange("I18:L18").merge().setFormula(`=IF(ABS(K17)<1;"Todo lo que se movió está anotado.";IF(K17<0;"Salió plata que no se anotó (gastos, transferencias o comisiones).";"Entró plata que no se anotó."))`)
     .setFontSize(9).setFontColor(C_.gris).setWrap(true);
-  sh.getRange("I10:L18").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground("#fafafa");
+  sh.getRange("I10:L18").setBorder(true, true, true, true, false, false, C_.borde, SpreadsheetApp.BorderStyle.SOLID).setBackground(C_.tarjeta);
   const sinAnotar = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied("=ABS($K$17)>=1").setFontColor(C_.rojoTexto)
     .setRanges([sh.getRange("I17:L17")]).build();
 
   // Mes a mes
   const m0 = 21;
-  sh.getRange(m0 - 1, 9).setValue("MES A MES").setFontWeight("bold").setFontColor(C_.titulo);
+  sh.getRange(m0 - 1, 9).setValue("MES A MES").setFontWeight("bold").setFontColor(C_.marino).setFontSize(11);
   sh.getRange(m0, 9, 1, 4).setValues([["MES", "INGRESOS", "GASTOS", "RESULTADO"]]).setFontWeight("bold").setBackground(C_.amarillo).setHorizontalAlignment("center");
   const fm = MESES_.map((mn, i) => {
     const ini = `DATE(${anio};${i + 1};1)`, fin = `EOMONTH(DATE(${anio};${i + 1};1);0)`;
@@ -578,13 +584,13 @@ function hojaResumen_(ss, anio, catalogo, f) {
   sh.setConditionalFormatRules([neg, sinAnotar, negMes, mesElegido]);
   const graf = sh.newChart().asColumnChart().addRange(sh.getRange(m0, 9, 13, 3)).setNumHeaders(1)
     .setOption("title", "Ingresos y gastos por mes").setOption("legend", { position: "bottom" })
-    .setOption("colors", ["#6aa84f", "#e26b0a"]).setPosition(r + 3, 2, 0, 0).setOption("width", 620).setOption("height", 280).build();
+    .setOption("colors", [C_.dorado, C_.marino]).setOption("fontName", "Inter").setPosition(r + 3, 2, 0, 0).setOption("width", 620).setOption("height", 280).build();
   sh.insertChart(graf);
 
   [[1, 16], [2, 150], [3, 160], [4, 150], [5, 150], [6, 150], [7, 54], [8, 24], [9, 120], [10, 120], [11, 120], [12, 120]]
     .forEach(([c, w]) => sh.setColumnWidth(c, w));
   sh.hideColumns(26);
-  sh.setTabColor("#1f4e9a");
+  sh.setTabColor(C_.dorado);
 }
 
 // ===== Operaciones de carga (importación) =====
