@@ -1,76 +1,77 @@
-// Construye la planilla nueva "Finanzas de la casa" desde cero (estructura, formato, fórmulas).
-// Idempotente: borra y rehace las hojas. Los datos se cargan después con la op "cargar".
-// Fórmulas en configuración regional es_BO: separador ";" y coma decimal.
-// Diseño: docs/PLANILLA-NUEVA.md
+// Construye "GESTIÓN <año>" con las 4 hojas de siempre de la planilla de la casa, mejoradas por
+// dentro, más una hoja CONFIG oculta:
+//   PRESUPUESTO MENSUAL  su tabla (mensual y anual) + debajo, la misma tabla con lo gastado de verdad
+//   GASTOS DIARIOS       categorías en columnas, una fila por gasto, un bloque plegable por mes
+//   REPORTE DE EGRESOS   un bloque por mes con una fila por día: ingresos (a mano o desde la app) y
+//                        egresos que se llenan solos desde GASTOS DIARIOS
+//   SALDOS               cuentas en filas, una columna por revisión, con TC oficial y paralelo
+//   CONFIG (oculta)      líneas, reglas, cuentas y registro de la app
+// Los totales usan SUMIFS por fecha o por línea: no se rompen al agregar filas.
+// Fórmulas en configuración es_BO (separador ";"). El catálogo y los datos llegan por parámetro
+// desde privado/ (el repo es público).
 
-const TEMA = {
-  fuente: "Inter",
-  tinta: "#141414", tinta2: "#6b6b6b", borde: "#e4e4e4", sutil: "#f6f6f6", fondo: "#ffffff",
-  ok: "#15803d", pend: "#b45309", err: "#c62828",
+const MESES_ = ["ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO", "JULIO", "AGOSTO",
+  "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"];
+const H_ = { presupuesto: "PRESUPUESTO MENSUAL", gastos: "GASTOS DIARIOS", reporte: "REPORTE DE EGRESOS",
+  saldos: "SALDOS", config: "CONFIG" };
+
+// Colores de la planilla de siempre
+const C_ = {
+  titulo: "#e26b0a", amarillo: "#ffff66", totalFondo: "#fce4d6", totalTexto: "#1f4e9a",
+  borde: "#a6a6a6", encabezado: "#f2f2f2", mes: "#fff2cc", texto: "#000000", gris: "#7f7f7f",
+  rojoFondo: "#f4cccc", rojoTexto: "#990000", verdeFondo: "#d9ead3",
   cat: {
-    "Alimentación": "#d8432b", "Movilidad": "#2563c9", "Servicios básicos": "#0f8c7a", "Varios": "#7c4ddb",
-    "Chicos": "#db2777", "Consultorio": "#0891b2", "Educación": "#ca8a04", "Impuestos": "#57534e",
-    "Compras grandes": "#1e293b", "Sin detalle": "#9a9a9a", "Ingresos": "#15803d", "Movimientos internos": "#9a9a9a",
+    "SERVICIOS BÁSICOS": "#fff2cc", "MOVILIDAD": "#fde9d9", "ALIMENTACIÓN": "#ddebf7", "VARIOS": "#e2efda",
+    "CHICOS": "#fce4ec", "CONSULTORIO": "#f3e1fa", "EDUCACIÓN": "#fff9e6", "IMPUESTOS": "#e7eef7",
+    "COMPRAS GRANDES": "#eceff1", "OTROS": "#f3f3f3",
   },
+  col: { COMIDA: "#ddebf7", TRANSPORTE: "#fde9d9", "COMPRAS VARIOS": "#e2efda", "SERVICIOS BÁSICOS": "#fff2cc" },
 };
-const FMT_BS = '"Bs "#,##0.00;"-Bs "#,##0.00;"–"';
-const FMT_USD = '"$ "#,##0.00;"-$ "#,##0.00;"–"';
-const FMT_NUM = '#,##0.00;-#,##0.00;"–"';
-const FMT_FECHA = "dd/mm/yyyy";
-const HOJAS = ["Inicio", "Movimientos", "Presupuesto", "Saldos", "Fotos de saldos", "Diario", "Reporte",
-  "Diezmo", "Cuentas", "Reglas", "Listas", "TC"];
+const F_BS = '"Bs"#,##0.00;"-Bs"#,##0.00;""';
+const F_USD = '"$us "#,##0.00;"-$us "#,##0.00;""';
+const F_NUM = '#,##0.00;-#,##0.00;""';
+const F_FECHA = "dd/mm/yyyy";
+const COLS_GASTO_ = ["COMIDA", "TRANSPORTE", "COMPRAS VARIOS", "SERVICIOS BÁSICOS"];
 
 const planillaOps_ = {};
+const AVISOS_ = [];
 
+// params: {anio, titulo, catalogo: {grupos:[[grupo, [[línea, columnaGastos, tabla]]]], ingresos:[[línea, diezmo]]},
+//          cuentas: [[cuenta, etiqueta SALDOS, dueño, moneda, medio, tc (Oficial/Paralelo), por defecto]]}
 planillaOps_.construir = function (ss, params) {
-  // Hoja temporal para poder borrar todas las demás
-  let tmp = ss.getSheetByName("_tmp") || ss.insertSheet("_tmp");
-  ss.getSheets().forEach(sh => { if (sh.getName() !== "_tmp") ss.deleteSheet(sh); });
-  HOJAS.forEach((n, i) => ss.insertSheet(n, i));
+  if (!params.catalogo || !params.anio || !params.cuentas) throw new Error("Faltan anio, catalogo o cuentas");
+  const tmp = ss.getSheetByName("_tmp") || ss.insertSheet("_tmp");
+  ss.getSheets().forEach(sh => { if (sh.getName() !== "_tmp") borrarHoja_(ss, sh); });
+  [H_.presupuesto, H_.gastos, H_.reporte, H_.saldos, H_.config].forEach((n, i) => ss.insertSheet(n, i));
   ss.deleteSheet(tmp);
   ss.setSpreadsheetLocale("es_BO");
   ss.setSpreadsheetTimeZone("America/La_Paz");
-
-  if (!params.catalogo) throw new Error("Falta params.catalogo");
-  hojaListas_(ss, params.catalogo); hojaTC_(ss); hojaCuentas_(ss); hojaMovimientos_(ss); hojaReglas_(ss);
-  hojaPresupuesto_(ss); hojaFotos_(ss); hojaDiezmo_(ss); hojaSaldos_(ss); hojaDiario_(ss);
-  hojaReporte_(ss); hojaInicio_(ss);
-  ss.setActiveSheet(ss.getSheetByName("Inicio"));
-  return { success: true, hojas: ss.getSheets().map(s => s.getName()) };
-};
-
-// Añade filas al final de una tabla (columna A contigua). params: {hoja, filas, columna_inicio}
-planillaOps_.cargar = function (ss, params) {
-  const sh = ss.getSheetByName(params.hoja);
-  const filas = params.filas || [];
-  if (!filas.length) return { success: true, agregadas: 0 };
-  const desde = ultimaFila_(sh) + 1;
-  const col = params.columna_inicio || 1;
-  const falta = desde + filas.length - 1 - sh.getMaxRows();
-  if (falta > 0) sh.insertRowsAfter(sh.getMaxRows(), falta + 500);
-  const datos = filas.map(f => f.map(v => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v)) ? fecha_(v) : v));
-  sh.getRange(desde, col, datos.length, datos[0].length).setValues(datos);
-  return { success: true, agregadas: datos.length, desde: desde };
-};
-
-// Reemplaza el contenido de datos de una tabla (desde la fila 2). params: {hoja, filas}
-planillaOps_.reemplazar = function (ss, params) {
-  const sh = ss.getSheetByName(params.hoja);
-  const n = ultimaFila_(sh);
-  const ancho = (params.filas[0] || []).length;
-  if (n > 1 && ancho) sh.getRange(2, 1, n - 1, ancho).clearContent();
-  return planillaOps_.cargar(ss, params);
-};
-
-planillaOps_.info = function (ss) {
-  return { success: true, url: ss.getUrl(), hojas: ss.getSheets().map(s => [s.getName(), ultimaFila_(s)]) };
+  ss.rename(params.titulo || ("FINANCIAL TRICKS - GESTIÓN " + params.anio));
+  const anio = params.anio;
+  hojaConfig_(ss, params);
+  hojaGastos_(ss, anio);
+  hojaReporte_(ss, anio, params.saldo_inicial_efectivo || 0);
+  hojaSaldos_(ss, params.cuentas);
+  hojaPresupuesto_(ss, anio, params.catalogo);
+  ss.getSheetByName(H_.config).hideSheet();
+  ss.setActiveSheet(ss.getSheetByName(H_.gastos));
+  return { success: true, hojas: ss.getSheets().map(s => s.getName()), avisos: AVISOS_ };
 };
 
 // ===== utilidades =====
 
+// Google a veces falla al borrar hojas grandes o con grupos de filas: reintentar y, si no, apartarla
+function borrarHoja_(ss, sh) {
+  for (let i = 0; i < 4; i++) {
+    try { ss.deleteSheet(sh); return; } catch (e) { SpreadsheetApp.flush(); Utilities.sleep(1500 * (i + 1)); }
+  }
+  sh.setName("_borrar_" + Date.now()); sh.hideSheet();
+  AVISOS_.push("No se pudo borrar una hoja vieja: quedó oculta como " + sh.getName());
+}
+
 function fecha_(iso) {
   const [a, m, d] = iso.split("-").map(Number);
-  return new Date(a, m - 1, d);  // medianoche en la zona del script (La Paz), igual que la planilla
+  return new Date(a, m - 1, d);
 }
 
 function ultimaFila_(sh) {
@@ -80,395 +81,467 @@ function ultimaFila_(sh) {
   return a1.getNextDataCell(SpreadsheetApp.Direction.DOWN).getRow();
 }
 
-function base_(sh, opts) {
-  opts = opts || {};
-  const rango = sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns());
-  rango.setFontFamily(TEMA.fuente).setFontSize(10).setFontColor(TEMA.tinta).setVerticalAlignment("middle");
-  if (opts.sinGrilla) sh.setHiddenGridlines(true);
-}
-
-function encabezado_(sh, fila, col, titulos, opts) {
-  opts = opts || {};
-  const r = sh.getRange(fila, col, 1, titulos.length);
-  r.setValues([titulos]).setFontWeight("bold").setFontColor(opts.color || TEMA.tinta)
-    .setBackground(opts.fondo || TEMA.sutil).setBorder(null, null, true, null, null, null, TEMA.borde, SpreadsheetApp.BorderStyle.SOLID);
-  sh.setRowHeight(fila, 30);
+function bordes_(r) {
+  r.setBorder(true, true, true, true, true, true, C_.borde, SpreadsheetApp.BorderStyle.SOLID);
   return r;
 }
 
-function tabla_(sh, cols, anchos, opts) {
-  encabezado_(sh, 1, 1, cols, opts);
-  sh.setFrozenRows(1);
-  anchos.forEach((w, i) => sh.setColumnWidth(i + 1, w));
-  const sobra = sh.getMaxColumns() - cols.length;
-  if (sobra > 0 && !(opts && opts.conservarColumnas)) sh.deleteColumns(cols.length + 1, sobra);
+function base_(sh, filas, cols) {
+  if (sh.getMaxRows() < filas) sh.insertRowsAfter(sh.getMaxRows(), filas - sh.getMaxRows());
+  if (sh.getMaxColumns() < cols) sh.insertColumnsAfter(sh.getMaxColumns(), cols - sh.getMaxColumns());
+  sh.getRange(1, 1, sh.getMaxRows(), sh.getMaxColumns()).setFontFamily("Arial").setFontSize(10)
+    .setVerticalAlignment("middle");
 }
 
-function lista_(rango, fuente, estricto) {
-  const regla = SpreadsheetApp.newDataValidation().requireValueInRange(fuente, true)
-    .setAllowInvalid(!estricto).build();
-  rango.setDataValidation(regla);
+function tituloHoja_(sh, fila, col, ancho, texto) {
+  sh.getRange(fila, col, 1, ancho).merge().setValue(texto).setFontSize(14).setFontWeight("bold")
+    .setFontColor(C_.titulo).setHorizontalAlignment("center").setBackground(C_.encabezado);
+  sh.setRowHeight(fila, 34);
 }
 
-function listaValores_(rango, valores) {
-  rango.setDataValidation(SpreadsheetApp.newDataValidation().requireValueInList(valores, true).setAllowInvalid(false).build());
+function congelar_(sh, filas, cols) {
+  try { if (filas !== null) sh.setFrozenRows(filas); } catch (e) { AVISOS_.push(sh.getName() + " filas: " + e.message); }
+  try { if (cols !== null) sh.setFrozenColumns(cols); } catch (e) { AVISOS_.push(sh.getName() + " columnas: " + e.message); }
 }
 
-function titulo_(sh, celda, texto, sub) {
-  sh.getRange(celda).setValue(texto).setFontSize(20).setFontWeight("bold");
-  if (sub) sh.getRange(celda).offset(1, 0).setValue(sub).setFontColor(TEMA.tinta2);
+function dias_(anio, m) { return new Date(anio, m, 0).getDate(); }
+
+function columnaLetra_(c) {
+  let s = "";
+  while (c > 0) { const r = (c - 1) % 26; s = String.fromCharCode(65 + r) + s; c = Math.floor((c - 1) / 26); }
+  return s;
 }
 
-function tarjeta_(sh, fila, col, etiqueta, formula, formato, nota) {
-  sh.getRange(fila, col).setValue(etiqueta).setFontColor(TEMA.tinta2).setFontSize(9);
-  const v = sh.getRange(fila + 1, col).setFormula(formula).setFontSize(18).setFontWeight("bold").setNumberFormat(formato);
-  if (nota) sh.getRange(fila + 2, col).setFormula(nota).setFontColor(TEMA.tinta2).setFontSize(9);
-  return v;
+function estiloTotal_(r) {
+  r.setFontWeight("bold").setFontColor(C_.totalTexto).setBackground(C_.totalFondo);
+  bordes_(r);
 }
 
-// ===== Hojas =====
+// ===== CONFIG (oculta) =====
 
-// El catálogo (categorías, líneas, ingresos) llega en params.catalogo desde privado/: no va en el
-// repo público. Formato: {gastos: [[categoría, [líneas]]], ingresos: [[línea, '¿Diezmo? Sí/No']]}
-
-function hojaListas_(ss, catalogo) {
-  const sh = ss.getSheetByName("Listas");
-  base_(sh);
-  const filas = [];
-  catalogo.gastos.forEach(([c, ls]) => ls.forEach(l => filas.push([c, l, "Gasto", ""])));
-  catalogo.ingresos.forEach(([l, d]) => filas.push(["Ingresos", l, "Ingreso", d]));
-  filas.push(["Movimientos internos", "Transferencia", "Transferencia", ""]);
-  filas.push(["Movimientos internos", "Ajuste de saldo", "Ajuste", ""]);
-  tabla_(sh, ["Categoría", "Línea", "Tipo", "¿Diezmo? (ingresos)", "", "Persona", "", "Tipo de movimiento", "", "Meses con datos"],
-    [150, 190, 110, 150, 24, 120, 24, 160, 24, 130], { conservarColumnas: true });
-  sh.getRange(2, 1, filas.length, 4).setValues(filas);
-  listaValores_(sh.getRange(2, 4, filas.length, 1), ["Sí", "No", ""]);
-  sh.getRange(2, 6, 2, 1).setValues([["Ever"], ["Ma. Nelfi"]]);
-  sh.getRange(2, 8, 4, 1).setValues([["Gasto"], ["Ingreso"], ["Transferencia"], ["Ajuste"]]);
-  sh.getRange("J2").setFormula('=IFERROR(SORT(UNIQUE(FILTER(Movimientos!O2:O;Movimientos!O2:O<>""));1;FALSE);TEXT(TODAY();"yyyy-mm"))');
-  // color por categoría
-  filas.forEach((f, i) => sh.getRange(i + 2, 1).setFontColor(TEMA.cat[f[0]] || TEMA.tinta).setFontWeight("bold"));
-  sh.setTabColor("#9a9a9a");
-  sh.getRange("A1").setNote("Categorías y líneas. Se pueden agregar filas: aparecen solas en los desplegables y en la app.");
+function hojaConfig_(ss, p) {
+  const sh = ss.getSheetByName(H_.config);
+  base_(sh, 1500, 30);
+  const lineas = [];
+  p.catalogo.grupos.forEach(([g, ls]) => ls.forEach(([l, col, tabla]) => lineas.push([g, l, col, tabla || "Mensual", "Gasto", ""])));
+  p.catalogo.ingresos.forEach(([l, dz]) => lineas.push(["INGRESOS", l, "", "", "Ingreso", dz]));
+  sh.getRange(1, 1, 1, 6).setValues([["GRUPO", "LÍNEA", "COLUMNA EN GASTOS DIARIOS", "TABLA", "TIPO", "¿DIEZMO?"]]);
+  sh.getRange(2, 1, lineas.length, 6).setValues(lineas);
+  sh.getRange(1, 8, 1, 3).setValues([["SI EL DETALLE DICE", "VA A LA LÍNEA", "AGREGADA POR"]]);
+  sh.getRange(1, 12, 1, 7).setValues([["CUENTA", "FILA EN SALDOS", "DUEÑO", "MONEDA", "MEDIO", "TIPO DE CAMBIO", "POR DEFECTO PARA"]]);
+  sh.getRange(2, 12, p.cuentas.length, 7).setValues(p.cuentas);
+  sh.getRange(1, 20, 1, 4).setValues([["ID APP", "OPERACIÓN", "HOJA Y FILA", "FECHA"]]);
+  sh.getRange(1, 25, 1, 1).setValues([["AUTOR"]]);
+  sh.getRange(2, 25, 2, 1).setValues([["EVER"], ["MA. NELFI"]]);
+  sh.getRange("1:1").setFontWeight("bold").setBackground(C_.encabezado);
+  congelar_(sh, 1, null);
 }
 
-function hojaTC_(ss) {
-  const sh = ss.getSheetByName("TC");
-  base_(sh);
-  tabla_(sh, ["Fecha", "Dólar paralelo (Bs por $)", "Dólar oficial", "Fuente"], [110, 190, 130, 260]);
-  sh.getRange("A2:A").setNumberFormat(FMT_FECHA);
-  sh.getRange("B2:C").setNumberFormat("0.00");
-  sh.setTabColor("#9a9a9a");
-  sh.getRange("B1").setNote("Tipo de cambio usado para pasar bolivianos a dólares. Lo actualiza solo QuickCash desde Dólar Blue Bolivia; se puede escribir uno a mano (gana el de la fecha más reciente).");
-}
+// ===== GASTOS DIARIOS =====
+// Columnas: B fecha, C autor, D:K montos (4 categorías × tarjeta/efectivo), L glosa, M total (fórmula),
+// N línea, O cuenta, P id (oculta). Por mes: fila título, filas de gastos (grupo plegable, con una
+// fila vacía al final para escribir a mano), fila TOTAL.
 
-function hojaCuentas_(ss) {
-  const sh = ss.getSheetByName("Cuentas");
-  base_(sh);
-  tabla_(sh, ["Cuenta", "Dueño", "Moneda", "Medio", "Saldo inicial", "Desde", "Saldo actual",
-    "Última foto", "Fecha foto", "Diferencia con la foto", "Por defecto para", "Activa"],
-    [240, 110, 80, 90, 130, 100, 140, 130, 100, 150, 170, 70]);
-  const n = 30;
-  listaValores_(sh.getRange(2, 3, n, 1), ["Bs", "USD"]);
-  listaValores_(sh.getRange(2, 4, n, 1), ["Banco", "Efectivo", "Cripto"]);
-  lista_(sh.getRange(2, 2, n, 1), ss.getSheetByName("Listas").getRange("F2:F"), false);
-  listaValores_(sh.getRange(2, 12, n, 1), ["Sí", "No"]);
-  sh.getRange("F2:F").setNumberFormat(FMT_FECHA);
-  sh.getRange("I2:I").setNumberFormat(FMT_FECHA);
-  sh.getRange("E2:H").setNumberFormat(FMT_NUM);
-  sh.getRange("J2:J").setNumberFormat(FMT_NUM);
-  for (let r = 2; r <= n + 1; r++) {
-    sh.getRange(r, 7).setFormula(`=IF(A${r}="";"";E${r}+SUMIFS(Movimientos!Q:Q;Movimientos!F:F;A${r};Movimientos!B:B;">"&F${r}))`);
-    sh.getRange(r, 9).setFormula(`=IF(A${r}="";"";IFERROR(1/(1/MAXIFS('Fotos de saldos'!A:A;'Fotos de saldos'!B:B;A${r}));""))`);
-    sh.getRange(r, 8).setFormula(`=IF(I${r}="";"";SUMIFS('Fotos de saldos'!C:C;'Fotos de saldos'!B:B;A${r};'Fotos de saldos'!A:A;I${r}))`);
-    sh.getRange(r, 10).setFormula(`=IF(OR(I${r}="";I${r}<=F${r});"";H${r}-(E${r}+SUMIFS(Movimientos!Q:Q;Movimientos!F:F;A${r};Movimientos!B:B;">"&F${r};Movimientos!B:B;"<="&I${r})))`);
+function hojaGastos_(ss, anio) {
+  const sh = ss.getSheetByName(H_.gastos);
+  base_(sh, 12 * 4 + 10, 16);
+  tituloHoja_(sh, 2, 2, 14, "REGISTRO DE GASTOS DIARIOS - GESTIÓN " + anio);
+  sh.getRange("B3:B4").merge().setValue("FECHA");
+  sh.getRange("C3:C4").merge().setValue("AUTOR");
+  COLS_GASTO_.forEach((c, i) => {
+    const col = 4 + i * 2;
+    sh.getRange(3, col, 1, 2).merge().setValue(c).setBackground(C_.col[c]);
+    sh.getRange(4, col, 1, 2).setValues([["TARJETA / QR", "EFECTIVO"]]).setBackground(C_.col[c]);
+  });
+  sh.getRange("L3:L4").merge().setValue("GLOSA");
+  sh.getRange("M3:M4").merge().setValue("TOTAL");
+  sh.getRange("N3:N4").merge().setValue("LÍNEA DEL PRESUPUESTO");
+  sh.getRange("O3:O4").merge().setValue("CUENTA");
+  sh.getRange("P3:P4").merge().setValue("ID");
+  const enc = sh.getRange("B3:P4");
+  enc.setFontWeight("bold").setHorizontalAlignment("center").setWrap(true);
+  sh.getRange("B3:C4").setBackground(C_.encabezado); sh.getRange("L3:P4").setBackground(C_.encabezado);
+  bordes_(enc);
+  // Total de la gestión (fila 5)
+  sh.getRange("B5:C5").merge().setValue("TOTAL GESTIÓN " + anio);
+  for (let c = 4; c <= 11; c++) {
+    const L = columnaLetra_(c);
+    sh.getRange(5, c).setFormula(`=SUMIFS(${L}$6:${L};$B$6:$B;">="&DATE(${anio};1;1);$B$6:$B;"<="&DATE(${anio};12;31))`);
   }
-  sh.getRange("G1").setNote("Saldo inicial + todo lo registrado en Movimientos después de 'Desde'.");
-  sh.getRange("J1").setNote("Foto de saldos menos lo que calcula la planilla a esa fecha. Si no es cero, hubo movimientos sin registrar: se corrige con un 'Ajuste de saldo'.");
-  sh.getRange("K1").setNote("La app usa esta cuenta cuando esa persona paga con ese medio. Ej.: 'Ever · Banco'.");
-  const f = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($J2);ABS($J2)>=1)')
-    .setFontColor(TEMA.pend).setBold(true).setRanges([sh.getRange("J2:J")]).build();
-  sh.setConditionalFormatRules([f]);
-  sh.setTabColor("#9a9a9a");
+  estiloTotal_(sh.getRange("B5:O5"));
+  let fila = 6;
+  const grupos = [];
+  for (let m = 1; m <= 12; m++) {
+    // "AGOSTO 2026" solo lo convierte Google en la fecha 1/8/2026: por eso "GASTOS DE AGOSTO 2026"
+    sh.getRange(fila, 2, 1, 14).merge().setValue("GASTOS DE " + MESES_[m - 1] + " " + anio).setFontWeight("bold")
+      .setBackground(C_.amarillo).setHorizontalAlignment("left");
+    const vacia = fila + 1;
+    formatoFilaGasto_(sh, vacia);
+    const total = fila + 2;
+    sh.getRange(total, 2, 1, 2).merge().setValue("TOTAL " + MESES_[m - 1]);
+    for (let c = 4; c <= 11; c++) {
+      const L = columnaLetra_(c);
+      sh.getRange(total, c).setFormula(
+        `=SUMIFS(${L}$6:${L};$B$6:$B;">="&DATE(${anio};${m};1);$B$6:$B;"<="&EOMONTH(DATE(${anio};${m};1);0))`);
+    }
+    estiloTotal_(sh.getRange(total, 2, 1, 14));
+    grupos.push(vacia);
+    fila = total + 1;
+  }
+  // Total por fila (M): una sola fórmula para filas de gastos y de totales, también las agregadas a mano
+  sh.getRange("M5").setFormula('=ARRAYFORMULA(IF(ISNUMBER(B5:B)+REGEXMATCH(B5:B&"";"^TOTAL");MMULT(IF(ISNUMBER(D5:K);D5:K;0);SEQUENCE(8;1;1;0));))');
+  sh.getRange("D5:M").setNumberFormat(F_NUM);
+  sh.getRange("B6:B").setNumberFormat(F_FECHA);
+  [[1, 16], [2, 92], [3, 88], [12, 230], [13, 100], [14, 170], [15, 170], [16, 90]].forEach(([c, w]) => sh.setColumnWidth(c, w));
+  for (let c = 4; c <= 11; c++) sh.setColumnWidth(c, 88);
+  congelar_(sh, 5, 0);
+  sh.setRowGroupControlPosition(SpreadsheetApp.GroupControlTogglePosition.BEFORE);
+  grupos.forEach(r => sh.getRange(r, 1, 1, 1).shiftRowGroupDepth(1));
+  sh.hideColumns(16);
+  sh.setTabColor(C_.titulo);
 }
 
-function hojaMovimientos_(ss) {
-  const sh = ss.getSheetByName("Movimientos");
-  sh.insertRowsAfter(sh.getMaxRows(), 9000);  // espacio para años de movimientos
-  base_(sh);
-  const cols = ["ID", "Fecha", "Tipo", "Línea", "Monto", "Cuenta", "Persona", "Detalle", "Revisar", "Origen",
-    "Registrado", "Categoría", "Medio", "Moneda", "Mes", "Monto en Bs", "Efecto en la cuenta", "Año"];
-  tabla_(sh, cols, [90, 95, 95, 170, 110, 210, 95, 260, 150, 200, 140, 140, 80, 70, 75, 115, 120, 60]);
-  // Columnas calculadas (L:R): una fórmula por columna, cubre las filas nuevas solas
-  sh.getRange("L2").setFormula('=ARRAYFORMULA(IF(D2:D="";;IFERROR(XLOOKUP(D2:D;Listas!B2:B;Listas!A2:A);"Sin categoría")))');
-  sh.getRange("M2").setFormula('=ARRAYFORMULA(IF(F2:F="";;IFERROR(XLOOKUP(F2:F;Cuentas!A2:A;Cuentas!D2:D);"")))');
-  sh.getRange("N2").setFormula('=ARRAYFORMULA(IF(F2:F="";;IFERROR(XLOOKUP(F2:F;Cuentas!A2:A;Cuentas!C2:C);"Bs")))');
-  sh.getRange("O2").setFormula('=ARRAYFORMULA(IF(B2:B="";;TEXT(B2:B;"yyyy-mm")))');
-  sh.getRange("P2").setFormula('=ARRAYFORMULA(IF(E2:E="";;IF(N2:N="USD";E2:E*IFERROR(VLOOKUP(B2:B;TC!A2:B;2;TRUE);10);E2:E)))');
-  sh.getRange("Q2").setFormula('=ARRAYFORMULA(IF(E2:E="";;IF(C2:C="Gasto";-E2:E;E2:E)))');
-  sh.getRange("R2").setFormula('=ARRAYFORMULA(IF(B2:B="";;YEAR(B2:B)))');
-  sh.getRange("L1:R1").setBackground("#ececec").setFontColor(TEMA.tinta2);
-  sh.getRange("L1").setNote("Columnas grises: se calculan solas. No escribir en ellas.");
-  // formatos y listas
-  sh.getRange("B2:B").setNumberFormat(FMT_FECHA);
-  sh.getRange("E2:E").setNumberFormat(FMT_NUM);
-  sh.getRange("P2:Q").setNumberFormat(FMT_NUM);
-  sh.getRange("K2:K").setNumberFormat("dd/mm/yyyy hh:mm");
-  const hasta = sh.getMaxRows() - 1;
-  lista_(sh.getRange(2, 3, hasta, 1), ss.getSheetByName("Listas").getRange("H2:H5"), true);
-  lista_(sh.getRange(2, 4, hasta, 1), ss.getSheetByName("Listas").getRange("B2:B"), false);
-  lista_(sh.getRange(2, 6, hasta, 1), ss.getSheetByName("Cuentas").getRange("A2:A"), false);
-  lista_(sh.getRange(2, 7, hasta, 1), ss.getSheetByName("Listas").getRange("F2:F"), false);
-  sh.getRange("A1").setNote("Una fila por movimiento. QuickCash agrega las suyas al final. Se puede escribir a mano: completar Fecha, Tipo, Línea, Monto, Cuenta y Persona (el ID puede quedar vacío).");
-  sh.getRange("E1").setNote("Siempre positivo para gastos e ingresos. En transferencias y ajustes: negativo si sale de la cuenta, positivo si entra.");
-  // Colores: ingresos en verde, marcados para revisar en ámbar
-  const reglas = [
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$C2="Ingreso"').setFontColor(TEMA.ok)
-      .setRanges([sh.getRange("E2:E")]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$I2<>""').setBackground("#fef3c7")
-      .setRanges([sh.getRange("I2:I")]).build(),
-  ];
-  sh.setConditionalFormatRules(reglas);
-  sh.getRange(1, 1, sh.getMaxRows(), 18).createFilter();
-  sh.setTabColor(TEMA.tinta);
+// Formato, listas y bordes de una fila de gasto (también al insertar desde la app)
+function formatoFilaGasto_(sh, fila) {
+  sh.getRange(fila, 2, 1, 15).setBackground(null).setFontWeight("normal").setFontColor(C_.texto);
+  bordes_(sh.getRange(fila, 2, 1, 14));
+  sh.getRange(fila, 2).setNumberFormat(F_FECHA);
+  sh.getRange(fila, 4, 1, 10).setNumberFormat(F_NUM);
+  const cfg = sh.getParent().getSheetByName(H_.config);
+  const dv = (rango) => SpreadsheetApp.newDataValidation().requireValueInRange(rango, true).setAllowInvalid(true).build();
+  sh.getRange(fila, 3).setDataValidation(dv(cfg.getRange("Y2:Y10")));
+  sh.getRange(fila, 14).setDataValidation(dv(cfg.getRange("B2:B200")));
+  sh.getRange(fila, 15).setDataValidation(dv(cfg.getRange("L2:L40")));
 }
 
-function hojaReglas_(ss) {
-  const sh = ss.getSheetByName("Reglas");
-  base_(sh);
-  tabla_(sh, ["Si el detalle dice…", "…va a la línea", "Agregada por"], [220, 200, 140]);
-  lista_(sh.getRange(2, 2, sh.getMaxRows() - 1, 1), ss.getSheetByName("Listas").getRange("B2:B"), false);
-  sh.getRange("A1").setNote("QuickCash elige la línea buscando estas palabras en el detalle (gana la más larga). Se pueden agregar, cambiar o borrar filas.");
-  sh.setTabColor("#9a9a9a");
+// ===== REPORTE DE EGRESOS =====
+// Por mes: título, encabezado, una fila por día, TOTAL. B fecha, C concepto de ingresos,
+// D:E ingresos (efectivo, banco), F:G egresos (automáticos desde GASTOS DIARIOS), H saldo de efectivo,
+// I cuenta del ingreso, J ids (oculta).
+
+function hojaReporte_(ss, anio, saldoInicial) {
+  const sh = ss.getSheetByName(H_.reporte);
+  base_(sh, 12 * 36 + 10, 10);
+  tituloHoja_(sh, 2, 2, 8, "REPORTE DE INGRESOS Y EGRESOS - GESTIÓN " + anio);
+  sh.getRange("B3:C3").merge().setValue("Efectivo en casa al 1 de enero").setFontColor(C_.gris);
+  sh.getRange("D3").setValue(saldoInicial).setNumberFormat(F_NUM).setBackground(C_.mes);
+  bordes_(sh.getRange("B3:D3"));
+  let fila = 5;
+  let saldoPrev = "$D$3";
+  const G = `'${H_.gastos}'`;
+  const grupos = [];
+  const dvC = SpreadsheetApp.newDataValidation().requireValueInRange(ss.getSheetByName(H_.config).getRange("L2:L40"), true).setAllowInvalid(true).build();
+  for (let m = 1; m <= 12; m++) {
+    sh.getRange(fila, 2, 1, 8).merge().setValue("REPORTE DE " + MESES_[m - 1] + " " + anio).setFontWeight("bold")
+      .setBackground(C_.amarillo);
+    const e1 = fila + 1;
+    sh.getRange(e1, 2, 2, 1).merge().setValue("FECHA");
+    sh.getRange(e1, 3, 2, 1).merge().setValue("CONCEPTO DEL INGRESO");
+    sh.getRange(e1, 4, 1, 2).merge().setValue("INGRESOS");
+    sh.getRange(e1, 6, 1, 2).merge().setValue("EGRESOS");
+    sh.getRange(e1, 8, 2, 1).merge().setValue("SALDO EFECTIVO");
+    sh.getRange(e1, 9, 2, 1).merge().setValue("CUENTA DEL INGRESO");
+    sh.getRange(e1 + 1, 4, 1, 4).setValues([["EFECTIVO", "BANCO", "EFECTIVO", "BANCO"]]);
+    const enc = sh.getRange(e1, 2, 2, 8);
+    enc.setFontWeight("bold").setHorizontalAlignment("center").setBackground(C_.encabezado).setWrap(true);
+    sh.getRange(e1, 4, 2, 2).setBackground(C_.verdeFondo);
+    sh.getRange(e1, 6, 2, 2).setBackground(C_.rojoFondo);
+    bordes_(enc);
+    const d0 = e1 + 2, n = dias_(anio, m);
+    const fechas = [], formulas = [];
+    for (let d = 1; d <= n; d++) {
+      const r = d0 + d - 1;
+      fechas.push([new Date(anio, m - 1, d)]);
+      const ef = ["E", "G", "I", "K"].map(L => `SUMIFS(${G}!${L}:${L};${G}!B:B;B${r})`).join("+");
+      const bk = ["D", "F", "H", "J"].map(L => `SUMIFS(${G}!${L}:${L};${G}!B:B;B${r})`).join("+");
+      formulas.push([`=${ef}`, `=${bk}`, `=${d === 1 ? saldoPrev : "H" + (r - 1)}+D${r}-F${r}`]);
+    }
+    sh.getRange(d0, 2, n, 1).setValues(fechas).setNumberFormat(F_FECHA);
+    sh.getRange(d0, 6, n, 3).setFormulas(formulas);
+    sh.getRange(d0, 4, n, 5).setNumberFormat(F_NUM);
+    bordes_(sh.getRange(d0, 2, n, 8));
+    sh.getRange(d0, 9, n, 1).setDataValidation(dvC);
+    const t = d0 + n;
+    sh.getRange(t, 2, 1, 2).merge().setValue("TOTAL " + MESES_[m - 1]);
+    sh.getRange(t, 4, 1, 5).setFormulas([[`=SUM(D${d0}:D${t - 1})`, `=SUM(E${d0}:E${t - 1})`, `=SUM(F${d0}:F${t - 1})`,
+      `=SUM(G${d0}:G${t - 1})`, `=H${t - 1}`]]).setNumberFormat(F_NUM);
+    estiloTotal_(sh.getRange(t, 2, 1, 8));
+    grupos.push([e1, t - e1]);
+    saldoPrev = "H" + (t - 1);
+    fila = t + 2;
+  }
+  [[1, 16], [2, 92], [3, 230], [4, 100], [5, 100], [6, 100], [7, 100], [8, 110], [9, 190], [10, 80]]
+    .forEach(([c, w]) => sh.setColumnWidth(c, w));
+  congelar_(sh, 3, null);
+  sh.setRowGroupControlPosition(SpreadsheetApp.GroupControlTogglePosition.BEFORE);
+  grupos.forEach(([r, n]) => sh.getRange(r, 1, n, 1).shiftRowGroupDepth(1));
+  const finde = SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($B1);WEEKDAY($B1;2)>5)')
+    .setFontColor(C_.gris).setRanges([sh.getRange("B1:B")]).build();
+  sh.setConditionalFormatRules([finde]);
+  sh.hideColumns(10);
+  sh.setTabColor(C_.totalTexto);
 }
 
-function hojaPresupuesto_(ss) {
-  const sh = ss.getSheetByName("Presupuesto");
-  base_(sh);
-  const meses = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
-  tabla_(sh, ["Año", "Tipo", "Categoría", "Línea", ...meses, "Total", "Real del año", "Diferencia"],
-    [55, 80, 140, 180, ...meses.map(() => 85), 105, 110, 105]);
-  sh.setFrozenColumns(4);
-  const n = sh.getMaxRows() - 1;
-  listaValores_(sh.getRange(2, 2, n, 1), ["Mensual", "Anual"]);
-  lista_(sh.getRange(2, 4, n, 1), ss.getSheetByName("Listas").getRange("B2:B"), false);
-  sh.getRange("C2").setFormula('=ARRAYFORMULA(IF(D2:D="";;IFERROR(XLOOKUP(D2:D;Listas!B2:B;Listas!A2:A);"")))');
-  sh.getRange("Q2").setFormula('=ARRAYFORMULA(IF(D2:D="";;MMULT(IF(ISNUMBER(E2:P);E2:P;0);SEQUENCE(12;1;1;0))))');
-  sh.getRange("R2").setFormula('=ARRAYFORMULA(IF(D2:D="";;SUMIFS(Movimientos!P:P;Movimientos!D:D;D2:D;Movimientos!R:R;A2:A;Movimientos!C:C;"Gasto")))');
-  sh.getRange("S2").setFormula('=ARRAYFORMULA(IF(D2:D="";;Q2:Q-R2:R))');
-  sh.getRange("C1").setBackground("#ececec").setFontColor(TEMA.tinta2);
-  sh.getRange("Q1:S1").setBackground("#ececec").setFontColor(TEMA.tinta2);
-  sh.getRange("E2:S").setNumberFormat(FMT_NUM);
-  sh.getRange("A1").setNote("Lo que se espera gastar por línea y mes. 'Mensual' = gastos de todos los meses; 'Anual' = pagos de una o dos veces al año. Real y diferencia se calculan solos.");
-  const reglas = [
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($S2);$S2<0)').setFontColor(TEMA.err).setBold(true)
-      .setRanges([sh.getRange("S2:S")]).build(),
-  ];
-  sh.setConditionalFormatRules(reglas);
-  sh.getRange(1, 1, sh.getMaxRows(), 19).createFilter();
-  sh.setTabColor(TEMA.cat["Alimentación"]);
-}
+// ===== SALDOS =====
+// Filas fijas; una columna por revisión desde F. La columna E dice con qué TC se pasa cada cuenta a
+// dólares: "Oficial" (banco) o "Paralelo" (efectivo en dólares, Binance, efectivo en casa).
 
-function hojaFotos_(ss) {
-  const sh = ss.getSheetByName("Fotos de saldos");
-  sh.insertRowsAfter(sh.getMaxRows(), 2000);
-  base_(sh);
-  tabla_(sh, ["Fecha", "Cuenta", "Saldo", "Moneda", "Nota"], [100, 240, 130, 80, 260]);
-  sh.getRange("D2").setFormula('=ARRAYFORMULA(IF(B2:B="";;IFERROR(XLOOKUP(B2:B;Cuentas!A2:A;Cuentas!C2:C);"")))');
-  sh.getRange("D1").setBackground("#ececec").setFontColor(TEMA.tinta2);
-  sh.getRange("A2:A").setNumberFormat(FMT_FECHA);
-  sh.getRange("C2:C").setNumberFormat(FMT_NUM);
-  lista_(sh.getRange(2, 2, sh.getMaxRows() - 1, 1), ss.getSheetByName("Cuentas").getRange("A2:A"), false);
-  sh.getRange("A1").setNote("Lo que mostraba cada cuenta el día que se revisó (como la hoja SALDOS de antes). QuickCash agrega una fila por cuenta cuando se cargan los saldos.");
-  sh.getRange(1, 1, sh.getMaxRows(), 5).createFilter();
-  sh.setTabColor("#9a9a9a");
-}
-
-function hojaDiezmo_(ss) {
-  const sh = ss.getSheetByName("Diezmo");
-  base_(sh, { sinGrilla: true });
-  titulo_(sh, "B2", "Diezmo", "El 10% de los ingresos marcados con ¿Diezmo? = Sí en Listas, reservado dentro de las cuentas.");
-  sh.getRange("B5:C8").setValues([
-    ["Acumulado de antes (Bs)", ""], ["Acumulado de antes ($)", ""], ["Hasta la fecha", ""], ["Porcentaje", 0.1]]);
-  sh.getRange("C7").setNumberFormat(FMT_FECHA);
-  sh.getRange("C8").setNumberFormat("0%");
-  sh.getRange("C5").setNumberFormat(FMT_NUM); sh.getRange("C6").setNumberFormat(FMT_NUM);
-  sh.getRange("B5:B8").setFontColor(TEMA.tinta2);
-  sh.getRange("C5:C8").setBackground("#fffbeb");
-  encabezado_(sh, 10, 2, ["Mes", "Ingresos con diezmo", "Diezmo (Bs)", "TC", "Diezmo ($)"]);
-  sh.getRange("B11").setFormula(
-    '=ARRAYFORMULA(LET(meses;SORT(UNIQUE(FILTER(Movimientos!O2:O;Movimientos!C2:C="Ingreso";Movimientos!B2:B>C7)));' +
-    'ing;MAP(meses;LAMBDA(m;SUMPRODUCT((Movimientos!O2:O=m)*(Movimientos!C2:C="Ingreso")*(IFERROR(XLOOKUP(Movimientos!D2:D;Listas!B2:B;Listas!D2:D);"")="Sí")*(Movimientos!B2:B>C7)*Movimientos!P2:P)));' +
-    'tc;MAP(meses;LAMBDA(m;IFERROR(VLOOKUP(EOMONTH(DATEVALUE(m&"-01");0);TC!A2:B;2;TRUE);10)));' +
-    'IFERROR(HSTACK(meses;ing;ing*C8;tc;ing*C8/tc);"")))');
-  sh.getRange("C11:C").setNumberFormat(FMT_NUM); sh.getRange("D11:D").setNumberFormat(FMT_NUM);
-  sh.getRange("E11:E").setNumberFormat("0.00"); sh.getRange("F11:F").setNumberFormat(FMT_NUM);
-  sh.getRange("H10").setValue("Total reservado").setFontWeight("bold");
-  sh.getRange("H11").setValue("En bolivianos").setFontColor(TEMA.tinta2);
-  sh.getRange("I11").setFormula("=C5+SUM(D11:D)").setNumberFormat(FMT_BS).setFontWeight("bold");
-  sh.getRange("H12").setValue("En dólares").setFontColor(TEMA.tinta2);
-  sh.getRange("I12").setFormula("=C6+SUM(F11:F)").setNumberFormat(FMT_USD).setFontWeight("bold").setFontSize(14);
-  [2, 3, 4, 5, 6, 7, 8, 9].forEach((c, i) => sh.setColumnWidth(c, [220, 170, 120, 70, 120, 24, 150, 150][i]));
-  sh.setColumnWidth(1, 24);
-  sh.setTabColor(TEMA.cat["Varios"]);
-}
-
-function hojaSaldos_(ss) {
-  const sh = ss.getSheetByName("Saldos");
-  base_(sh, { sinGrilla: true });
-  sh.setColumnWidth(1, 24);
-  titulo_(sh, "B2", "Saldos", "Calculados con lo registrado en Movimientos. Las fotos de saldos sirven de control.");
-  tarjeta_(sh, 5, 2, "Total en bolivianos", '=SUMIFS(Cuentas!G:G;Cuentas!C:C;"Bs";Cuentas!L:L;"Sí")', FMT_BS);
-  tarjeta_(sh, 5, 4, "Total en dólares (cuentas en $)", '=SUMIFS(Cuentas!G:G;Cuentas!C:C;"USD";Cuentas!L:L;"Sí")', FMT_USD);
-  tarjeta_(sh, 5, 6, "Dólar paralelo hoy", '=IFERROR(VLOOKUP(TODAY();TC!A2:B;2;TRUE);10)', "0.00",
-    '="Fuente: TC, "&TEXT(IFERROR(MAXIFS(TC!A:A;TC!A:A;"<="&TODAY());"");"dd/mm/yyyy")');
-  tarjeta_(sh, 9, 2, "Todo en dólares", "=B6/F6+D6", FMT_USD);
-  tarjeta_(sh, 9, 4, "Diezmo reservado", "=Diezmo!I12", FMT_USD);
-  tarjeta_(sh, 9, 6, "Ahorro real", "=B10-D10", FMT_USD, '="Todo en dólares menos el diezmo"');
-  sh.getRange("F10").setFontColor(TEMA.ok);
-  [2, 3, 4, 5, 6, 7].forEach(c => sh.setColumnWidth(c, c % 2 ? 24 : 200));
-  // Tabla por cuenta
-  encabezado_(sh, 14, 2, ["Cuenta", "", "Saldo actual", "", "Moneda", "", "Diferencia con la última foto"]);
-  sh.getRange("B15").setFormula('=FILTER(Cuentas!A2:A;Cuentas!A2:A<>"";Cuentas!L2:L="Sí")');
-  sh.getRange("D15").setFormula('=FILTER(Cuentas!G2:G;Cuentas!A2:A<>"";Cuentas!L2:L="Sí")');
-  sh.getRange("F15").setFormula('=FILTER(Cuentas!C2:C;Cuentas!A2:A<>"";Cuentas!L2:L="Sí")');
-  sh.getRange("H15").setFormula('=FILTER(Cuentas!J2:J;Cuentas!A2:A<>"";Cuentas!L2:L="Sí")');
-  sh.getRange("D15:D40").setNumberFormat(FMT_NUM); sh.getRange("H15:H40").setNumberFormat(FMT_NUM);
-  sh.setColumnWidth(8, 200);
-  // Historia de fotos como la hoja de antes: cuentas × fechas
-  sh.getRange("B32").setValue("Historia de las fotos de saldos").setFontWeight("bold").setFontSize(12);
-  sh.getRange("B33").setFormula("=QUERY('Fotos de saldos'!A1:C;\"select B, sum(C) where A is not null group by B pivot A label B 'Cuenta'\";1)");
-  sh.insertColumnsAfter(sh.getMaxColumns(), 240);  // una columna por foto (como la hoja de antes)
-  sh.getRange(34, 3, 30, 240).setNumberFormat(FMT_NUM);
-  sh.getRange(33, 3, 1, 240).setNumberFormat(FMT_FECHA).setFontWeight("bold");
-  sh.setTabColor(TEMA.ok);
-}
-
-function hojaDiario_(ss) {
-  const sh = ss.getSheetByName("Diario");
-  base_(sh, { sinGrilla: true });
-  sh.setColumnWidth(1, 24);
-  titulo_(sh, "B2", "Diario", "Gastos por día del mes elegido en Inicio, por categoría y medio (como la planilla de antes).");
-  sh.getRange("B4").setValue("Mes").setFontColor(TEMA.tinta2);
-  sh.getRange("C4").setFormula("=Inicio!C5").setFontWeight("bold");
-  sh.getRange("B6").setFormula(
-    '=IFERROR(QUERY(Movimientos!A1:R;"select B, sum(P) where C = \'Gasto\' and O = \'"&C4&"\' group by B pivot L, M label B \'Fecha\'";1);"Sin gastos este mes")');
-  sh.getRange("B7:B45").setNumberFormat("ddd dd/mm");
-  sh.getRange("C7:Z45").setNumberFormat(FMT_NUM);
-  sh.getRange("B6:Z6").setFontWeight("bold").setWrap(true).setBackground(TEMA.sutil);
-  sh.setColumnWidth(2, 110);
-  for (let c = 3; c <= 26; c++) sh.setColumnWidth(c, 105);
-  sh.setTabColor("#9a9a9a");
-}
-
-function hojaReporte_(ss) {
-  const sh = ss.getSheetByName("Reporte");
-  base_(sh, { sinGrilla: true });
-  sh.setColumnWidth(1, 24);
-  titulo_(sh, "B2", "Reporte", "Ingresos y egresos: por mes (arriba) y por día del mes elegido en Inicio (abajo).");
-  sh.getRange("B5").setValue("Por mes").setFontWeight("bold").setFontSize(12);
-  sh.getRange("B6").setFormula(
-    '=IFERROR(QUERY(Movimientos!A1:R;"select O, sum(P) where C = \'Gasto\' or C = \'Ingreso\' group by O pivot C order by O desc label O \'Mes\'";1);"")');
-  sh.getRange("E6").setValue("Resultado").setFontWeight("bold").setBackground(TEMA.sutil);
-  sh.getRange("E7").setFormula('=ARRAYFORMULA(IF(B7:B30="";;D7:D30-C7:C30))');
-  sh.getRange("C7:E30").setNumberFormat(FMT_NUM);
-  sh.getRange("B6:E6").setBackground(TEMA.sutil).setFontWeight("bold");
-  const r = SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(0).setFontColor(TEMA.err)
-    .setRanges([sh.getRange("E7:E30")]).build();
-  sh.setConditionalFormatRules([r]);
-  sh.getRange("G5").setValue("Por día").setFontWeight("bold").setFontSize(12);
-  sh.getRange("G6").setFormula(
-    '=IFERROR(QUERY(Movimientos!A1:R;"select B, sum(P) where (C = \'Gasto\' or C = \'Ingreso\') and O = \'"&Inicio!C5&"\' group by B pivot C, M label B \'Fecha\'";1);"Sin movimientos este mes")');
-  sh.getRange("G7:G45").setNumberFormat("ddd dd/mm");
-  sh.getRange("H7:M45").setNumberFormat(FMT_NUM);
-  sh.getRange("G6:M6").setBackground(TEMA.sutil).setFontWeight("bold").setWrap(true);
-  [2, 3, 4, 5].forEach(c => sh.setColumnWidth(c, 115));
-  sh.setColumnWidth(6, 24);
-  for (let c = 7; c <= 13; c++) sh.setColumnWidth(c, 115);
-  // gráfico: ingresos vs gastos por mes
-  const ch = sh.newChart().asColumnChart().addRange(sh.getRange("B6:D30"))
-    .setNumHeaders(1).setOption("title", "Ingresos y gastos por mes").setOption("legend", { position: "bottom" })
-    .setOption("colors", [TEMA.cat["Alimentación"], TEMA.ok]).setOption("fontName", TEMA.fuente)
-    .setPosition(33, 2, 0, 0).setOption("width", 640).setOption("height", 300).build();
-  sh.insertChart(ch);
-  sh.setTabColor("#9a9a9a");
-}
-
-function hojaInicio_(ss) {
-  const sh = ss.getSheetByName("Inicio");
-  base_(sh, { sinGrilla: true });
-  sh.setColumnWidth(1, 24);
-  titulo_(sh, "B2", "Finanzas de la casa", "Elegí el mes. Todo lo demás se calcula solo desde Movimientos y Presupuesto.");
-  sh.getRange("B5").setValue("Mes").setFontColor(TEMA.tinta2);
-  const mes = sh.getRange("C5");
-  mes.setValue(Utilities.formatDate(new Date(), "America/La_Paz", "yyyy-MM")).setFontWeight("bold").setFontSize(12)
-    .setBackground("#fffbeb").setHorizontalAlignment("left").setNumberFormat("@");
-  lista_(mes, ss.getSheetByName("Listas").getRange("J2:J"), false);
-  // Ayudantes ocultos: año y mes
-  sh.getRange("Z1").setFormula("=VALUE(LEFT(C5;4))"); sh.getRange("Z2").setFormula("=VALUE(RIGHT(C5;2))");
-  const G = 'SUMIFS(Movimientos!P:P;Movimientos!O:O;$C$5;Movimientos!C:C;"Gasto")';
-  const I = 'SUMIFS(Movimientos!P:P;Movimientos!O:O;$C$5;Movimientos!C:C;"Ingreso")';
-  const P = 'SUMPRODUCT((Presupuesto!A2:A=$Z$1)*(Presupuesto!B2:B="Mensual")*INDEX(Presupuesto!E2:P;0;$Z$2))';
-  tarjeta_(sh, 7, 2, "Gastado", "=" + G, FMT_BS, `=IF(${P}=0;"Sin presupuesto cargado";TEXT(${G}/${P};"0%")&" del presupuesto mensual")`);
-  tarjeta_(sh, 7, 4, "Presupuesto mensual", "=" + P, FMT_BS, `=IF(${P}-${G}>=0;"Quedan Bs "&TEXT(${P}-${G};"#,##0");"Se pasó por Bs "&TEXT(${G}-${P};"#,##0"))`);
-  tarjeta_(sh, 7, 6, "Ingresos", "=" + I, FMT_BS);
-  tarjeta_(sh, 7, 8, "Resultado del mes", `=${I}-${G}`, FMT_BS, '=IF(H8<0;"Se gastó más de lo que entró";"Entró más de lo que se gastó")');
-  tarjeta_(sh, 11, 2, "Ahorro real", "=Saldos!F10", FMT_USD, '="Sin contar el diezmo"');
-  tarjeta_(sh, 11, 4, "Dólar paralelo", "=Saldos!F6", "0.00");
-  tarjeta_(sh, 11, 6, "Por revisar", '=COUNTIFS(Movimientos!I:I;"<>";Movimientos!A:A;"<>")-1', "0",
-    '="movimientos marcados en Movimientos"');
-  const rr = [
-    SpreadsheetApp.newConditionalFormatRule().whenNumberLessThan(0).setFontColor(TEMA.err).setRanges([sh.getRange("H8")]).build(),
-  ];
-  [2, 3, 4, 5, 6, 7, 8, 9].forEach(c => sh.setColumnWidth(c, c % 2 ? 24 : 190));
-  // Presupuesto vs real por línea
-  sh.getRange("B15").setValue("Presupuesto contra real").setFontWeight("bold").setFontSize(12);
-  encabezado_(sh, 16, 2, ["Categoría", "", "Línea", "", "Presupuesto", "", "Real", "", "Queda", "Uso"]);
-  sh.getRange("B17").setFormula(
-    '=ARRAYFORMULA(LET(tip;Listas!C2:C;lin;FILTER(Listas!B2:B;tip="Gasto");cat;FILTER(Listas!A2:A;tip="Gasto");' +
-    'pres;MAP(lin;LAMBDA(l;SUMPRODUCT((Presupuesto!A2:A=$Z$1)*(Presupuesto!D2:D=l)*INDEX(Presupuesto!E2:P;0;$Z$2))));' +
-    'real;MAP(lin;LAMBDA(l;SUMIFS(Movimientos!P:P;Movimientos!D:D;l;Movimientos!O:O;$C$5;Movimientos!C:C;"Gasto")));' +
-    'v;(pres>0)+(real>0);vacio;MAP(lin;LAMBDA(x;""));' +
-    'IFERROR(FILTER(HSTACK(cat;vacio;lin;vacio;pres;vacio;real;vacio;pres-real;IF(pres>0;real/pres;""));v);"Sin gastos ni presupuesto este mes")))');
-  sh.getRange("F17:J120").setNumberFormat(FMT_NUM);
-  sh.getRange("K17:K120").setNumberFormat("0%");
-  sh.setColumnWidth(10, 190); sh.setColumnWidth(11, 80);
-  const uso = [
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($K17);$K17>1)').setFontColor(TEMA.err).setBold(true)
-      .setRanges([sh.getRange("J17:K120")]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND(ISNUMBER($K17);$K17>0.85;$K17<=1)').setFontColor(TEMA.pend)
-      .setRanges([sh.getRange("K17:K120")]).build(),
-    SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=AND($H17>0;$F17=0)').setFontColor(TEMA.pend)
-      .setRanges([sh.getRange("F17:F120")]).build(),
-  ];
-  // Color de la categoría en la primera columna
-  Object.keys(TEMA.cat).forEach(c => uso.push(SpreadsheetApp.newConditionalFormatRule().whenTextEqualTo(c)
-    .setFontColor(TEMA.cat[c]).setBold(true).setRanges([sh.getRange("B17:B120")]).build()));
-  sh.setConditionalFormatRules(rr.concat(uso));
-  // Gráfico: gasto por categoría del mes (ayudante en Z)
-  sh.getRange("AB1").setValue("Categoría"); sh.getRange("AC1").setValue("Real");
-  sh.getRange("AB2").setFormula(
-    '=IFERROR(QUERY(Movimientos!A1:R;"select L, sum(P) where C = \'Gasto\' and O = \'"&C5&"\' group by L order by sum(P) desc label L \'\', sum(P) \'\'";0);"")');
-  const ch = sh.newChart().asBarChart().addRange(sh.getRange("AB1:AC14")).setNumHeaders(1)
-    .setOption("title", "Gasto del mes por categoría").setOption("legend", { position: "none" })
-    .setOption("colors", [TEMA.tinta]).setOption("fontName", TEMA.fuente)
-    .setPosition(4, 12, 0, 0).setOption("width", 460).setOption("height", 320).build();
-  sh.insertChart(ch);
-  sh.hideColumns(26, 4);
-  sh.setTabColor(TEMA.tinta);
-}
-
-// Escribe valores en un rango exacto. params: {hoja, fila, columna, valores}
-planillaOps_.escribir = function (ss, params) {
-  const sh = ss.getSheetByName(params.hoja);
-  const v = params.valores.map(f => f.map(x => (typeof x === "string" && /^\d{4}-\d{2}-\d{2}$/.test(x)) ? fecha_(x) : x));
-  const falta = params.fila + v.length - 1 - sh.getMaxRows();
-  if (falta > 0) sh.insertRowsAfter(sh.getMaxRows(), falta + 500);
-  sh.getRange(params.fila, params.columna, v.length, v[0].length).setValues(v);
-  return { success: true, filas: v.length };
+const SALDOS_FILAS_ = {
+  fecha: 2, bs0: 3, bsN: 8, totalBs: 9, pendientes: 11, bsMenos: 12,
+  tcOficial: 14, tcParalelo: 15, bsEnUsd: 16,
+  usd0: 18, usdN: 21, totalUsd: 22, general: 24, diezmoBs: 26, diezmoUsd: 27, ahorro: 29, ahorroPeriodo: 30,
 };
 
-// Revisión: celdas con error en cada hoja + valores visibles de rangos pedidos. params: {rangos: ["Inicio!B5:K30"]}
+function hojaSaldos_(ss, cuentas) {
+  const sh = ss.getSheetByName(H_.saldos);
+  base_(sh, 40, 260);
+  const F = SALDOS_FILAS_;
+  const etiquetas = {};
+  const bs = cuentas.filter(c => c[3] === "Bs"), usd = cuentas.filter(c => c[3] === "USD");
+  bs.slice(0, 6).forEach((c, i) => { etiquetas[F.bs0 + i] = c[1]; });
+  usd.slice(0, 4).forEach((c, i) => { etiquetas[F.usd0 + i] = c[1]; });
+  Object.assign(etiquetas, {
+    [F.fecha]: "FECHA DE REVISIÓN", [F.totalBs]: "TOTAL BOLIVIANOS", [F.pendientes]: "GASTOS PENDIENTES",
+    [F.bsMenos]: "TOTAL SALDO MENOS GASTOS EN BS", [F.tcOficial]: "TIPO DE CAMBIO OFICIAL (BANCO)",
+    [F.tcParalelo]: "TIPO DE CAMBIO PARALELO", [F.bsEnUsd]: "BOLIVIANOS CONVERTIDOS EN $US",
+    [F.totalUsd]: "TOTAL DÓLARES", [F.general]: "TOTAL GENERAL EN $US", [F.diezmoBs]: "DIEZMO EN BS",
+    [F.diezmoUsd]: "DIEZMO EN $US", [F.ahorro]: "AHORRO REAL EN $US (SIN DIEZMO)", [F.ahorroPeriodo]: "AHORRO DESDE LA REVISIÓN ANTERIOR",
+  });
+  Object.entries(etiquetas).forEach(([f, t]) => sh.getRange(Number(f), 2, 1, 3).merge().setValue(t));
+  sh.getRange(F.fecha, 5).setValue("TC QUE USA");
+  cuentas.forEach(c => {
+    const fila = Object.keys(etiquetas).find(k => etiquetas[k] === c[1]);
+    if (fila) sh.getRange(Number(fila), 5).setValue(c[5]);
+  });
+  sh.getRange(F.fecha, 2, 1, 4).setFontWeight("bold").setBackground(C_.amarillo);
+  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground("#dce6f1"));
+  [F.bsEnUsd, F.general, F.ahorro].forEach(f => sh.getRange(f, 2, 1, 3).setFontWeight("bold").setBackground(C_.amarillo));
+  [F.tcOficial, F.tcParalelo].forEach(f => sh.getRange(f, 2, 1, 3).setFontColor(C_.gris));
+  sh.getRange(F.bs0, 2, F.ahorroPeriodo - F.bs0 + 1, 4).setWrap(true);
+  sh.getRange(F.bs0, 5, F.ahorroPeriodo - F.bs0 + 1, 1).setFontColor(C_.gris).setHorizontalAlignment("center");
+  [[1, 16], [2, 110], [3, 110], [4, 90], [5, 84]].forEach(([c, w]) => sh.setColumnWidth(c, w));
+  for (let c = 6; c <= 60; c++) sh.setColumnWidth(c, 112);
+  congelar_(sh, 2, 5);
+  bordesEtiquetasSaldos_(sh);
+  sh.setTabColor("#38761d");
+}
+
+// Fórmulas y formatos de una columna de SALDOS (al importar y cuando la app agrega una revisión)
+function formatoColumnaSaldos_(sh, col) {
+  const F = SALDOS_FILAS_, L = columnaLetra_(col), P = col > 6 ? columnaLetra_(col - 1) : null;
+  const conv = (f0, fN) => {
+    const partes = [];
+    for (let f = f0; f <= fN; f++) partes.push(`IF($E${f}="Paralelo";N(${L}${f})/${L}${F.tcParalelo};N(${L}${f})/${L}${F.tcOficial})`);
+    return partes.join("+");
+  };
+  sh.getRange(F.totalBs, col).setFormula(`=SUM(${L}${F.bs0}:${L}${F.bsN})`);
+  sh.getRange(F.bsMenos, col).setFormula(`=${L}${F.totalBs}-${L}${F.pendientes}`);
+  // Los gastos pendientes salen del banco: se descuentan al TC oficial
+  sh.getRange(F.bsEnUsd, col).setFormula(`=IFERROR(${conv(F.bs0, F.bsN)}-N(${L}${F.pendientes})/${L}${F.tcOficial};"")`);
+  sh.getRange(F.totalUsd, col).setFormula(`=SUM(${L}${F.usd0}:${L}${F.usdN})`);
+  sh.getRange(F.general, col).setFormula(`=IFERROR(${L}${F.bsEnUsd}+${L}${F.totalUsd};"")`);
+  sh.getRange(F.ahorro, col).setFormula(`=IFERROR(${L}${F.general}-N(${L}${F.diezmoUsd});"")`);
+  if (P) sh.getRange(F.ahorroPeriodo, col).setFormula(`=IFERROR(${L}${F.ahorro}-${P}${F.ahorro};"")`);
+  sh.getRange(F.fecha, col).setNumberFormat(F_FECHA).setFontWeight("bold").setBackground(C_.amarillo).setHorizontalAlignment("center");
+  sh.getRange(F.bs0, col, F.bsMenos - F.bs0 + 1, 1).setNumberFormat(F_BS);
+  sh.getRange(F.diezmoBs, col).setNumberFormat(F_BS);
+  sh.getRange(F.tcOficial, col, 2, 1).setNumberFormat("0.00").setFontColor(C_.gris);
+  sh.getRange(F.bsEnUsd, col).setNumberFormat(F_USD).setFontWeight("bold").setBackground(C_.amarillo);
+  sh.getRange(F.usd0, col, F.totalUsd - F.usd0 + 1, 1).setNumberFormat(F_USD);
+  [F.general, F.diezmoUsd, F.ahorro, F.ahorroPeriodo].forEach(f => sh.getRange(f, col).setNumberFormat(F_USD));
+  [F.general, F.ahorro].forEach(f => sh.getRange(f, col).setFontWeight("bold").setBackground(C_.amarillo));
+  [F.totalBs, F.totalUsd].forEach(f => sh.getRange(f, col).setFontWeight("bold").setBackground("#dce6f1"));
+  bordesColumna_(sh, col, 1);
+}
+
+function bordesColumna_(sh, col, ancho) {
+  const F = SALDOS_FILAS_;
+  [[F.fecha, 1], [F.bs0, F.totalBs - F.bs0 + 1], [F.pendientes, 2], [F.tcOficial, 3], [F.usd0, F.totalUsd - F.usd0 + 1],
+    [F.general, 1], [F.diezmoBs, 2], [F.ahorro, 2]].forEach(([f, n]) => bordes_(sh.getRange(f, col, n, ancho)));
+}
+
+function bordesEtiquetasSaldos_(sh) { bordesColumna_(sh, 2, 4); }
+
+// ===== PRESUPUESTO MENSUAL =====
+// Arriba: la tabla de ella (líneas × meses, mensual y anual). Debajo: la misma tabla con lo gastado de
+// verdad (desde GASTOS DIARIOS, por línea y mes), en rojo lo que se pasó del presupuesto.
+
+function hojaPresupuesto_(ss, anio, catalogo) {
+  const sh = ss.getSheetByName(H_.presupuesto);
+  base_(sh, 260, 17);
+  const G = `'${H_.gastos}'`;
+  const mensual = [], anual = [];
+  catalogo.grupos.forEach(([g, ls]) => ls.forEach(([l, col, tabla]) => ((tabla || "Mensual") === "Anual" ? anual : mensual).push([g, l])));
+  let fila = 2;
+  const bloque = (titulo, lineas, esReal) => {
+    tituloHoja_(sh, fila, 2, 15, titulo);
+    const enc = fila + 2;
+    sh.getRange(enc, 2, 1, 15).setValues([["", "", ...MESES_, "TOTAL"]]).setFontWeight("bold").setHorizontalAlignment("center");
+    sh.getRange(enc, 4, 1, 13).setBackground(C_.amarillo);
+    bordes_(sh.getRange(enc, 2, 1, 15));
+    let r = enc + 1;
+    const inicio = r;
+    const filasLinea = {};
+    let g0 = r, gActual = null;
+    const cerrarGrupo = (hasta) => {
+      if (gActual === null) return;
+      const rg = sh.getRange(g0, 2, hasta - g0 + 1, 1);
+      if (hasta > g0) rg.merge();
+      rg.setValue(gActual).setFontWeight("bold").setFontColor(C_.titulo).setHorizontalAlignment("center").setWrap(true);
+      sh.getRange(g0, 2, hasta - g0 + 1, 2).setBackground(C_.cat[gActual] || C_.cat.OTROS);
+    };
+    lineas.forEach(([g, l]) => {
+      if (g !== gActual) { cerrarGrupo(r - 1); gActual = g; g0 = r; }
+      sh.getRange(r, 3).setValue(l).setHorizontalAlignment("center");
+      filasLinea[l] = r;
+      if (esReal) {
+        const formulas = MESES_.map((_, i) =>
+          `=SUMIFS(${G}!$M:$M;${G}!$N:$N;$C${r};${G}!$B:$B;">="&DATE(${anio};${i + 1};1);${G}!$B:$B;"<="&EOMONTH(DATE(${anio};${i + 1};1);0))`);
+        sh.getRange(r, 4, 1, 12).setFormulas([formulas]);
+      }
+      sh.getRange(r, 16).setFormula(`=SUM(D${r}:O${r})`);
+      r++;
+    });
+    cerrarGrupo(r - 1);
+    sh.getRange(r, 2, 1, 2).merge().setValue("TOTAL");
+    sh.getRange(r, 4, 1, 13).setFormulas([MESES_.map((_, i) => `=SUM(${columnaLetra_(4 + i)}${inicio}:${columnaLetra_(4 + i)}${r - 1})`)
+      .concat([`=SUM(P${inicio}:P${r - 1})`])]);
+    estiloTotal_(sh.getRange(r, 2, 1, 15));
+    sh.getRange(inicio, 4, r - inicio + 1, 13).setNumberFormat(F_BS);
+    bordes_(sh.getRange(inicio, 2, r - inicio + 1, 15));
+    sh.getRange(inicio, 16, r - inicio, 1).setFontWeight("bold");
+    fila = r + 3;
+    return filasLinea;
+  };
+  const pm = bloque("PLANILLA DE PRESUPUESTO MENSUAL GESTIÓN " + anio, mensual, false);
+  const pa = bloque("PLANILLA DE PRESUPUESTO ANUAL GESTIÓN " + anio, anual, false);
+  const rm = bloque("GASTADO DE VERDAD - MENSUAL " + anio, mensual, true);
+  const ra = bloque("GASTADO DE VERDAD - ANUAL " + anio, anual, true);
+  // Rojo si lo gastado pasa lo presupuestado en esa misma línea y mes (las dos tablas tienen el mismo orden)
+  const reglas = [];
+  [[rm, pm], [ra, pa]].forEach(([real, pres]) => {
+    const r0 = Math.min(...Object.values(real)), p0 = Math.min(...Object.values(pres));
+    const n = Object.keys(real).length;
+    reglas.push(SpreadsheetApp.newConditionalFormatRule()
+      .whenFormulaSatisfied(`=AND(N(D${r0})>0;N(D${r0})>N(OFFSET(D${r0};${p0 - r0};0)))`)
+      .setBackground(C_.rojoFondo).setFontColor(C_.rojoTexto).setRanges([sh.getRange(r0, 4, n, 12)]).build());
+  });
+  sh.setConditionalFormatRules(reglas);
+  [[1, 16], [2, 130], [3, 190]].forEach(([c, w]) => sh.setColumnWidth(c, w));
+  for (let c = 4; c <= 16; c++) sh.setColumnWidth(c, 104);
+  sh.setTabColor("#e69138");
+  // Dónde quedó cada línea (para cargar el presupuesto y para la app)
+  const cfg = ss.getSheetByName(H_.config);
+  const mapa = [];
+  Object.entries(pm).forEach(([l, r]) => mapa.push([l, "Mensual", r, rm[l]]));
+  Object.entries(pa).forEach(([l, r]) => mapa.push([l, "Anual", r, ra[l]]));
+  cfg.getRange(1, 27, 1, 4).setValues([["LÍNEA", "TABLA", "FILA PRESUPUESTO", "FILA REAL"]]);
+  cfg.getRange(2, 27, mapa.length, 4).setValues(mapa);
+}
+
+// ===== Operaciones de carga (importación) =====
+
+// params.gastos: [[fecha, autor, [8 montos], glosa, línea, cuenta, id]]
+planillaOps_.cargar_gastos = function (ss, params) {
+  const sh = ss.getSheetByName(H_.gastos);
+  const porMes = {};
+  params.gastos.forEach(g => { const m = Number(g[0].slice(5, 7)); (porMes[m] = porMes[m] || []).push(g); });
+  // de diciembre a enero: insertar filas no mueve los meses que faltan cargar
+  for (let m = 12; m >= 1; m--) {
+    const gs = (porMes[m] || []).sort((a, b) => a[0].localeCompare(b[0]));
+    if (!gs.length) continue;
+    const vacia = filaTituloMes_(sh, m) + 1;
+    sh.insertRowsBefore(vacia, gs.length);
+    const rango = sh.getRange(vacia, 2, gs.length, 15);
+    sh.getRange(vacia + gs.length, 2, 1, 15).copyTo(rango, SpreadsheetApp.CopyPasteType.PASTE_FORMAT, false);
+    sh.getRange(vacia + gs.length, 2, 1, 15).copyTo(rango, SpreadsheetApp.CopyPasteType.PASTE_DATA_VALIDATION, false);
+    rango.setValues(gs.map(g => [fecha_(g[0]), g[1], ...g[2].map(v => v || ""), g[3], "", g[4], g[5] || "", g[6]]));
+  }
+  return { success: true };
+};
+
+function filaTituloMes_(sh, m) {
+  const anioTxt = sh.getRange("B2").getDisplayValue().match(/\d{4}/)[0];
+  const buscado = "GASTOS DE " + MESES_[m - 1] + " " + anioTxt;
+  const hit = sh.getRange("B:B").createTextFinder(buscado).matchEntireCell(true).findNext();
+  if (!hit) throw new Error("No encontré el mes " + buscado);
+  return hit.getRow();
+}
+
+// params.ingresos: [[fecha, concepto, efectivo, banco, cuenta]]
+planillaOps_.cargar_ingresos = function (ss, params) {
+  const sh = ss.getSheetByName(H_.reporte);
+  const fechas = sh.getRange("B1:B" + sh.getLastRow()).getValues();
+  const filaDe = {};
+  fechas.forEach((f, i) => { if (f[0] instanceof Date) filaDe[Utilities.formatDate(f[0], "America/La_Paz", "yyyy-MM-dd")] = i + 1; });
+  params.ingresos.forEach(([f, c, ef, bk, cta]) => {
+    const r = filaDe[f];
+    if (!r) return;
+    sh.getRange(r, 3, 1, 3).setValues([[c, ef || "", bk || ""]]);
+    if (cta) sh.getRange(r, 9).setValue(cta);
+  });
+  return { success: true };
+};
+
+// params.columnas: [{fecha, valores: {etiqueta: monto}, tc_oficial, tc_paralelo, pendientes, diezmo_bs, diezmo_usd}]
+planillaOps_.cargar_saldos = function (ss, params) {
+  const sh = ss.getSheetByName(H_.saldos);
+  params.columnas.forEach((c, i) => escribirColumnaSaldos_(sh, 6 + (params.desde || 0) + i, c));
+  return { success: true };
+};
+
+function escribirColumnaSaldos_(sh, col, c) {
+  const F = SALDOS_FILAS_;
+  const etiquetas = sh.getRange(1, 2, F.ahorroPeriodo, 1).getValues().map(f => f[0]);
+  sh.getRange(F.fecha, col).setValue(fecha_(c.fecha));
+  Object.entries(c.valores).forEach(([et, v]) => {
+    const i = etiquetas.indexOf(et);
+    if (i >= 0) sh.getRange(i + 1, col).setValue(v);
+  });
+  sh.getRange(F.pendientes, col).setValue(c.pendientes || "");
+  sh.getRange(F.tcOficial, col, 2, 1).setValues([[c.tc_oficial], [c.tc_paralelo]]);
+  sh.getRange(F.diezmoBs, col, 2, 1).setValues([[c.diezmo_bs || ""], [c.diezmo_usd || ""]]);
+  formatoColumnaSaldos_(sh, col);
+}
+
+// params.valores: {línea: {tabla: "Mensual"|"Anual", meses: [12]}}
+planillaOps_.cargar_presupuesto = function (ss, params) {
+  const sh = ss.getSheetByName(H_.presupuesto);
+  const mapa = ss.getSheetByName(H_.config).getRange("AA2:AD200").getValues().filter(f => f[0]);
+  mapa.forEach(([l, tabla, filaP]) => {
+    const v = params.valores[l];
+    if (v && v.tabla === tabla) sh.getRange(filaP, 4, 1, 12).setValues([v.meses.map(x => x || "")]);
+  });
+  return { success: true };
+};
+
+planillaOps_.cargar_reglas = function (ss, params) {
+  ss.getSheetByName(H_.config).getRange(2, 8, params.reglas.length, 3).setValues(params.reglas);
+  return { success: true };
+};
+
+// Deja plegados todos los meses menos el pedido (o el actual)
+planillaOps_.plegar = function (ss, params) {
+  const mes = params.mes || Number(Utilities.formatDate(new Date(), "America/La_Paz", "M"));
+  [H_.gastos, H_.reporte].forEach(n => {
+    const sh = ss.getSheetByName(n);
+    const col = sh.getRange("B1:B" + sh.getLastRow()).getDisplayValues().map(f => f[0]);
+    for (let m = 1; m <= 12; m++) {
+      const i = col.findIndex(v => v.startsWith((n === H_.reporte ? "REPORTE DE " : "GASTOS DE ") + MESES_[m - 1] + " "));
+      if (i < 0) continue;
+      const g = sh.getRowGroup(i + 2, 1);
+      if (!g) continue;
+      if (m === mes) g.expand(); else g.collapse();
+    }
+  });
+  return { success: true };
+};
+
+planillaOps_.info = function (ss) {
+  return { success: true, url: ss.getUrl(), nombre: ss.getName(), hojas: ss.getSheets().map(s => [s.getName(), s.getLastRow(), s.isSheetHidden()]) };
+};
+
+// Revisión: celdas con error + valores visibles de rangos pedidos
 planillaOps_.revisar = function (ss, params) {
   SpreadsheetApp.flush();
   const errores = {};
@@ -483,7 +556,7 @@ planillaOps_.revisar = function (ss, params) {
   return { success: true, errores: errores, rangos: rangos };
 };
 
-// Evalúa fórmulas sueltas en una hoja temporal (para depurar). params: {formulas: [...]}
+// Evalúa fórmulas sueltas en una hoja temporal (para depurar)
 planillaOps_.evaluar = function (ss, params) {
   const sh = ss.insertSheet("_prueba");
   try {

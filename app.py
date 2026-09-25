@@ -163,21 +163,21 @@ def en_cola(ts):
 
 def enviar(p, tag):
     op = p.get('op')
-    if op == 'movimiento':
-        fila = [p['id'], p['fecha'], p['tipo'], p['linea'], p['monto'], p['cuenta'], p['persona'],
-                p.get('detalle', ''), '', 'QuickCash']
-        r = planilla_op('registrar', f"{tag} {p['fecha']} {p['linea']}", filas=[fila])
-        return {'fila': (r.get('filas') or {}).get(p['id'])}
-    if op == 'foto':
-        planilla_op('foto', f"{tag} foto {p['fecha']}", id=p['id'], fecha=p['fecha'], saldos=p['saldos'],
-                    nota=p.get('nota', ''))
-        return {}
+    if op == 'movimiento' and p['tipo'] == 'Gasto':
+        r = planilla_op('gasto', f"{tag} gasto {p['fecha']} {p['linea']}", id=p['id'], fecha=p['fecha'],
+                        autor=planilla.AUTOR.get(p.get('persona'), ''), columna=p.get('columna') or 'COMPRAS VARIOS',
+                        medio=p.get('medio', 'Banco'), monto=p['monto'], glosa=p.get('detalle', ''),
+                        linea=p['linea'], cuenta=p['cuenta'])
+        return {'fila': r.get('donde')}
+    if op == 'movimiento' and p['tipo'] == 'Ingreso':
+        r = planilla_op('ingreso', f"{tag} ingreso {p['fecha']} {p['linea']}", id=p['id'], fecha=p['fecha'],
+                        concepto=p.get('detalle') or p['linea'], medio=p.get('medio', 'Banco'), monto=p['monto'], cuenta=p['cuenta'])
+        return {'fila': r.get('donde')}
+    if op == 'saldos':
+        r = planilla_op('saldos', f"{tag} saldos {p['fecha']}", **{k: v for k, v in p.items() if k != 'op'})
+        return {'fila': r.get('donde')}
     if op == 'regla':
         planilla_op('regla', f"{tag} regla {p['palabra']}", palabra=p['palabra'], linea=p['linea'], quien=p.get('quien', ''))
-        return {}
-    if op == 'tc':
-        planilla_op('tc', f"{tag} tc {p['fecha']}", fecha=p['fecha'], paralelo=p['paralelo'],
-                    oficial=p.get('oficial'), fuente=p.get('fuente', ''))
         return {}
     raise SheetError(f'Operación desconocida: {op}', 422)
 
@@ -186,18 +186,25 @@ def al_confirmar(p):
     cola.cache_vencer(CLAVE_CACHE)
 
 
-def tc_del_dia():
-    """Una vez por día: el dólar paralelo desde Dólar Blue Bolivia a la hoja TC."""
-    hoy = planilla.hoy().isoformat()
-    ts, d, _ = cola.cache_leer(CLAVE_CACHE)
-    if d and any(str(f[0])[:10] == hoy for f in d.get('tc', [])):
-        return
-    if cola.estados([f'tc-{hoy}']):
-        return
-    j = requests.get(API_TC, timeout=20).json()['data']
-    cola.encolar(f'tc-{hoy}', {'op': 'tc', 'fecha': hoy, 'paralelo': j['blue']['sell'],
-                               'oficial': j['official']['sell'], 'fuente': 'Dólar Blue Bolivia (automático)'})
-    log(f"TC del día encolado: {j['blue']['sell']}")
+_tc = {'ts': 0, 'valor': None}
+
+
+def tc_hoy():
+    """Dólar oficial (BCB, para cuentas de banco) y paralelo (efectivo), de Dólar Blue Bolivia; caché 30 min."""
+    if _tc['valor'] and time.time() - _tc['ts'] < 1800:
+        return _tc['valor']
+    try:
+        j = requests.get(API_TC, timeout=10).json()['data']
+        _tc.update(ts=time.time(), valor={'oficial': float(j['official']['sell']), 'paralelo': float(j['blue']['sell']),
+                                          'fecha': planilla.hoy().isoformat()})
+    except Exception as e:
+        log(f"TC no disponible: {e!r}")
+        if not _tc['valor']:
+            ts, d, _ = cola.cache_leer(CLAVE_CACHE)
+            u = (d or {}).get('saldos') or [{}]
+            _tc['valor'] = {'oficial': u[-1].get('tc_oficial') or 10, 'paralelo': u[-1].get('tc_paralelo') or 10,
+                            'fecha': u[-1].get('fecha', '')}
+    return _tc['valor']
 
 
 # ===== Sesión (clave de la casa) =====
@@ -293,9 +300,19 @@ def api_registro():
         return jsonify({'status': 'error', 'message': 'Faltan tipo, línea o cuenta'}), 400
     if d['tipo'] in ('Gasto', 'Ingreso') and monto <= 0:
         return jsonify({'status': 'error', 'message': 'El monto tiene que ser mayor a cero'}), 400
+    try:
+        cat = planilla.catalogo(datos()[0])
+    except SheetError as e:
+        return _error(e)
+    info = {l['linea']: l for l in cat['lineas']}
+    if d['linea'] not in info:
+        return jsonify({'status': 'error', 'message': f"La línea {d['linea']} no existe en la planilla"}), 400
+    if int(str(d['fecha'])[:4]) != int(datos()[0].get('anio', 0)):
+        return jsonify({'status': 'error', 'message': 'Esa fecha es de otra gestión.'}), 400
     p = {'op': 'movimiento', 'fecha': d['fecha'], 'tipo': d['tipo'], 'linea': str(d['linea'])[:80],
          'monto': round(monto, 2), 'cuenta': str(d['cuenta'])[:80], 'persona': str(d.get('persona', ''))[:40],
-         'detalle': str(d.get('detalle', ''))[:160]}
+         'detalle': str(d.get('detalle', ''))[:160], 'medio': 'Efectivo' if d.get('medio') == 'Efectivo' else 'Banco',
+         'columna': info[d['linea']].get('columna') or 'COMPRAS VARIOS'}
     cola.encolar(idr, p)
     return jsonify({'status': 'success', 'id': idr, 'estado': 'pendiente'}), 202
 
@@ -332,14 +349,15 @@ def api_saldos():
         d, ts, act = datos()
     except SheetError as e:
         return _error(e)
-    res = planilla.saldos(d, en_cola(ts))
+    res = planilla.saldos(d, tc_hoy(), en_cola(ts))
     res['actualizando'] = act
     return jsonify(res)
 
 
 @app.route('/api/saldos', methods=['POST'])
 def api_foto():
-    """Foto de saldos: lo que muestra cada cuenta hoy. {id, fecha, saldos: [{cuenta, monto}]}"""
+    """Revisión de saldos: lo que muestra cada cuenta hoy -> columna nueva en SALDOS.
+    {id, fecha, saldos: [{cuenta, monto}], pendientes}"""
     if (r := requiere_sesion()):
         return r
     d = request.get_json(silent=True) or {}
@@ -348,12 +366,24 @@ def api_foto():
         return jsonify({'status': 'error', 'message': 'Falta el id'}), 400
     try:
         datetime.strptime(str(d.get('fecha')), '%Y-%m-%d')
-        saldos = [[str(x['cuenta'])[:80], round(float(x['monto']), 2)] for x in d.get('saldos') or []]
+        montos = {str(x['cuenta']): round(float(x['monto']), 2) for x in d.get('saldos') or []}
+        pendientes = round(float(d.get('pendientes') or 0), 2)
     except (TypeError, ValueError, KeyError):
         return jsonify({'status': 'error', 'message': 'Saldos inválidos'}), 400
-    if not saldos:
+    try:
+        dat, ts, _ = datos()
+    except SheetError as e:
+        return _error(e)
+    cat = planilla.catalogo(dat)
+    etiqueta = {c['cuenta']: c['etiqueta'] for c in cat['cuentas']}
+    valores = {etiqueta[c]: v for c, v in montos.items() if c in etiqueta}
+    if not valores:
         return jsonify({'status': 'error', 'message': 'No hay saldos para guardar'}), 400
-    cola.encolar(idr, {'op': 'foto', 'fecha': d['fecha'], 'saldos': saldos, 'nota': str(d.get('nota', ''))[:120]})
+    tc = tc_hoy()
+    s = planilla.saldos(dat, tc, en_cola(ts))
+    cola.encolar(idr, {'op': 'saldos', 'fecha': d['fecha'], 'valores': valores, 'pendientes': pendientes,
+                       'tc_oficial': tc['oficial'], 'tc_paralelo': tc['paralelo'],
+                       'diezmo_bs': s['diezmo_bs'], 'diezmo_usd': s['diezmo_usd']})
     return jsonify({'status': 'success', 'id': idr}), 202
 
 
@@ -409,7 +439,7 @@ def health_check():
 
 
 # El enviador de la cola arranca con cada proceso; solo uno toma el lock y envía
-cola.arrancar_enviador(enviar, SheetError, log, al_confirmar=al_confirmar, tarea_periodica=tc_del_dia)
+cola.arrancar_enviador(enviar, SheetError, log, al_confirmar=al_confirmar)
 
 
 if __name__ == '__main__':

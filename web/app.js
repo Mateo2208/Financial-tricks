@@ -2,12 +2,18 @@
 
 // Colores por categoría (los mismos que la planilla). Siempre acompañan al nombre.
 const COLOR_CAT = {
-  'Alimentación': 'var(--c-alimentacion)', 'Movilidad': 'var(--c-movilidad)', 'Servicios básicos': 'var(--c-servicios)',
-  'Varios': 'var(--c-varios)', 'Chicos': 'var(--c-chicos)', 'Consultorio': 'var(--c-consultorio)',
-  'Educación': 'var(--c-educacion)', 'Impuestos': 'var(--c-impuestos)', 'Compras grandes': 'var(--c-grandes)',
-  'Ingresos': 'var(--ok)',
+  'alimentacion': 'var(--c-alimentacion)', 'movilidad': 'var(--c-movilidad)', 'servicios basicos': 'var(--c-servicios)',
+  'varios': 'var(--c-varios)', 'chicos': 'var(--c-chicos)', 'consultorio': 'var(--c-consultorio)',
+  'educacion': 'var(--c-educacion)', 'impuestos': 'var(--c-impuestos)', 'compras grandes': 'var(--c-grandes)',
+  'ingresos': 'var(--ok)',
 };
-const colorCat = c => COLOR_CAT[c] || 'var(--tinta-3)';
+const colorCat = c => COLOR_CAT[normalizar(c)] || 'var(--tinta-3)';
+// En la planilla las líneas están como las escribe ella (SUPERMERCADO); en la app se leen más cómodas
+const SIGLAS = new Set(['upsa', 'soat', 'tec', 'mn', 'bnb', 'bmsc', 'cjn', 'bu', 'd.', 'c.', 'lib.']);
+function bonito(t) {
+  return String(t || '').toLowerCase().split(' ').map((w, i) => SIGLAS.has(w) ? w.toUpperCase()
+    : (i === 0 ? w.charAt(0).toUpperCase() + w.slice(1) : w)).join(' ');
+}
 // El valor es lo que se escribe en la columna Persona de la planilla
 const PERSONAS = [{ id: 'Ever', nombre: 'Ever' }, { id: 'Ma. Nelfi', nombre: 'Ma. Nelfi' }];
 
@@ -225,8 +231,8 @@ function pintarFecha() {
 
 function pintarLinea() {
   const l = estado.linea ? infoLinea(estado.linea) : null;
-  $('#linea-nombre').textContent = estado.linea || (tipoActual() === 'Gasto' ? 'Elegí la línea' : 'Elegí de dónde viene');
-  $('#linea-cat').textContent = l ? l.categoria : '';
+  $('#linea-nombre').textContent = estado.linea ? bonito(estado.linea) : (tipoActual() === 'Gasto' ? 'Elegí la línea' : 'Elegí de dónde viene');
+  $('#linea-cat').textContent = l ? bonito(l.categoria) : '';
   $('#linea-punto').style.background = l ? colorCat(l.categoria) : 'var(--borde-fuerte)';
   $('#btn-linea').classList.toggle('vacia', !estado.linea);
   const pista = $('#linea-pista');
@@ -242,7 +248,7 @@ function pintarFrecuentes() {
   const base = frec.length ? frec : lineasDe(tipo).slice(0, 6).map(l => l.linea);
   $('#frecuentes').innerHTML = base.slice(0, 6).map(l => {
     const i = infoLinea(l);
-    return `<button type="button" class="chip" data-linea="${escapeHtml(l)}" aria-pressed="${l === estado.linea}" style="--c:${colorCat(i && i.categoria)}"><span class="punto"></span>${escapeHtml(l)}</button>`;
+    return `<button type="button" class="chip" data-linea="${escapeHtml(l)}" aria-pressed="${l === estado.linea}" style="--c:${colorCat(i && i.categoria)}"><span class="punto"></span>${escapeHtml(bonito(l))}</button>`;
   }).join('');
 }
 
@@ -295,7 +301,7 @@ function actualizarBoton() {
   const btn = $('#btn-registrar');
   btn.disabled = !!falta;
   btn.innerHTML = falta ? escapeHtml(falta)
-    : `Registrar <span class="num">${escapeHtml(enMoneda(f.monto, f.moneda))}</span> <span class="btn-sub">en ${escapeHtml(f.linea)}</span>`;
+    : `Registrar <span class="num">${escapeHtml(enMoneda(f.monto, f.moneda))}</span> <span class="btn-sub">en ${escapeHtml(bonito(f.linea))}</span>`;
   $('#btn-lista').disabled = !!falta;
 }
 
@@ -303,7 +309,8 @@ function armarRegistro(f) {
   return {
     id: nuevoId(), estado: 'lista', auto: false,
     ...f,
-    payload: { fecha: f.fecha, tipo: f.tipo, linea: f.linea, monto: f.monto, cuenta: f.cuenta, persona: persona(), detalle: f.detalle },
+    payload: { fecha: f.fecha, tipo: f.tipo, linea: f.linea, monto: f.monto, cuenta: f.cuenta, persona: persona(), detalle: f.detalle,
+      medio: cuentaActual()?.medio === 'Efectivo' ? 'Efectivo' : 'Banco' },
   };
 }
 
@@ -356,7 +363,7 @@ async function registrar(e) {
   try {
     await enviarAlServidor(reg);
     limpiarFormulario();  // al instante: si ya empieza a escribir el siguiente, no se le borra
-    toast(`Guardado: ${enMoneda(f.monto, f.moneda)} en ${f.linea}`);
+    toast(`Guardado: ${enMoneda(f.monto, f.moneda)} en ${bonito(f.linea)}`);
   } catch (err) {
     if (err.sinRed || err.status >= 500) {
       guardarPendiente({ ...reg, auto: true });
@@ -449,7 +456,7 @@ function pintarPendientes() {
     return `
       <li class="fila" style="--c:${colorCat(i && i.categoria)}">
         <span class="punto" aria-hidden="true"></span>
-        <div class="fila-texto"><div class="fila-titulo">${p.tipo === 'Ingreso' ? 'Ingreso: ' : ''}${escapeHtml(p.linea)}</div>${meta ? `<div class="fila-meta">${meta}</div>` : ''}</div>
+        <div class="fila-texto"><div class="fila-titulo">${p.tipo === 'Ingreso' ? 'Ingreso: ' : ''}${escapeHtml(bonito(p.linea))}</div>${meta ? `<div class="fila-meta">${meta}</div>` : ''}</div>
         <span class="fila-monto num${p.tipo === 'Ingreso' ? ' ingreso' : ''}">${escapeHtml(enMoneda(p.monto, p.moneda))}</span>
         <div class="fila-acciones"><button type="button" class="btn-icono" data-quitar="${p.id}" aria-label="Quitar de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>
       </li>`;
@@ -501,7 +508,7 @@ function abrirSelector(titulo, grupos, elegido, callback) {
   $('#selector-buscar').value = '';
   $('#selector-lista').innerHTML = grupos.map(g => `
     <div class="hoja-grupo" data-grupo>
-      ${g.titulo ? `<p class="hoja-grupo-titulo" style="color:${g.color || 'var(--tinta-2)'}">${escapeHtml(g.titulo)}</p>` : ''}
+      ${g.titulo ? `<p class="hoja-grupo-titulo" style="color:${g.color || 'var(--tinta-2)'}">${escapeHtml(bonito(g.titulo))}</p>` : ''}
       ${g.items.map(it => `<button type="button" class="hoja-item" data-valor="${escapeHtml(it.valor)}" data-buscar="${escapeHtml(normalizar(it.texto + ' ' + (g.titulo || '')))}" aria-pressed="${it.valor === elegido}">
         <span class="punto" style="background:${g.color || 'var(--tinta-3)'}"></span><span>${escapeHtml(it.texto)}</span>${it.sub ? `<span class="suave hoja-sub">${escapeHtml(it.sub)}</span>` : ''}
         ${it.valor === elegido ? '<svg class="ic"><use href="#i-check"/></svg>' : ''}</button>`).join('')}
@@ -521,7 +528,7 @@ function elegirLinea() {
   for (const l of lineasDe(tipo)) {
     let g = grupos.find(x => x.titulo === l.categoria);
     if (!g) grupos.push(g = { titulo: l.categoria, color: colorCat(l.categoria), items: [] });
-    g.items.push({ valor: l.linea, texto: l.linea });
+    g.items.push({ valor: l.linea, texto: bonito(l.linea) });
   }
   abrirSelector(tipo === 'Gasto' ? 'Línea del presupuesto' : 'Tipo de ingreso', grupos, estado.linea, v => {
     estado.linea = v; estado.lineaManual = true;
@@ -639,7 +646,7 @@ function pintarResumen(r, esActual) {
           const abierta = abiertas.has(c.categoria);
           return `<li class="cat" style="--c:${color}">
             <button type="button" class="cat-cabeza" data-cat="${escapeHtml(c.categoria)}" aria-expanded="${abierta}">
-              <span class="cat-nombre"><span class="punto"></span>${escapeHtml(c.categoria)}</span>
+              <span class="cat-nombre"><span class="punto"></span>${escapeHtml(bonito(c.categoria))}</span>
               <span class="cat-monto num">${escapeHtml(bs(c.real))}</span>
               ${barra(c.real, c.presupuesto, color)}
               <span class="cat-uso">${escapeHtml(c.presupuesto ? `de ${bs(c.presupuesto)}. ${textoUso(c.real, c.presupuesto)}` : 'Sin presupuesto')}</span>
@@ -647,7 +654,7 @@ function pintarResumen(r, esActual) {
             </button>
             <ul class="lineas" ${abierta ? '' : 'hidden'}>
               ${c.lineas.map(l => `<li class="linea-fila">
-                <span class="linea-nombre">${escapeHtml(l.linea)}${l.anual ? ' <span class="etiqueta">anual</span>' : ''}</span>
+                <span class="linea-nombre">${escapeHtml(bonito(l.linea))}${l.anual ? ' <span class="etiqueta">anual</span>' : ''}</span>
                 <span class="num">${escapeHtml(bs(l.real))}</span>
                 ${barra(l.real, l.presupuesto, color)}
                 <span class="cat-uso">${escapeHtml(l.presupuesto ? `de ${bs(l.presupuesto)}. ${textoUso(l.real, l.presupuesto)}` : 'Sin presupuesto')}</span>
@@ -660,7 +667,7 @@ function pintarResumen(r, esActual) {
 
     ${r.ingresos_por_linea.length ? `<section class="bloque" aria-labelledby="t-ing">
       <h2 id="t-ing" class="bloque-titulo">Ingresos</h2>
-      <ul class="lista-simple">${r.ingresos_por_linea.map(i => `<li><span>${escapeHtml(i.linea)}</span><strong class="num ingreso">${escapeHtml(bs(i.monto))}</strong></li>`).join('')}</ul>
+      <ul class="lista-simple">${r.ingresos_por_linea.map(i => `<li><span>${escapeHtml(bonito(i.linea))}</span><strong class="num ingreso">${escapeHtml(bs(i.monto))}</strong></li>`).join('')}</ul>
     </section>` : ''}
 
     ${Object.keys(r.por_persona).length ? `<section class="bloque" aria-labelledby="t-per">
@@ -674,9 +681,9 @@ function pintarResumen(r, esActual) {
         <div class="dia-cabeza"><span>${escapeHtml(fmtDiaCorto.format(deIso(d.fecha)))}</span></div>
         <ul class="filas">${d.items.map(m => {
           const meta = [m.anotando ? 'Anotando en la planilla…' : '', m.detalle, m.persona, m.cuenta].filter(Boolean).map(escapeHtml).join(', ');
-          return `<li class="fila fila-mov" style="--c:${colorCat(m.tipo === 'Ingreso' ? 'Ingresos' : m.categoria)}">
+          return `<li class="fila fila-mov" style="--c:${colorCat(m.tipo === 'Ingreso' ? 'INGRESOS' : m.categoria)}">
             <span class="punto" aria-hidden="true"></span>
-            <div class="fila-texto"><div class="fila-titulo">${escapeHtml(m.linea || m.tipo)}</div><div class="fila-meta">${meta}</div></div>
+            <div class="fila-texto"><div class="fila-titulo">${escapeHtml(bonito(m.linea || m.tipo))}</div><div class="fila-meta">${meta}</div></div>
             <span class="fila-monto num${m.tipo === 'Ingreso' ? ' ingreso' : ''}">${m.tipo === 'Ingreso' ? '+' : ''}${escapeHtml(bs(m.monto_bs))}</span>
           </li>`;
         }).join('')}</ul></div>`).join('')}
@@ -728,30 +735,30 @@ async function cargarSaldos(forzar = false) {
 
 function pintarSaldos(s) {
   const cuerpo = $('#saldos-cuerpo');
-  const fechaTc = s.fecha_tc ? deIso(s.fecha_tc) : null;
   cuerpo.innerHTML = `
     <div class="total">
       <p class="total-texto-arriba">Ahorro real</p>
       <p class="total-monto"><span class="moneda">$</span>${escapeHtml(numTxt(s.ahorro_real_usd))}</p>
-      <p class="total-texto">Todo en dólares ${escapeHtml(usd(s.todo_usd))}, menos el diezmo reservado ${escapeHtml(usd(s.diezmo_usd))}.</p>
+      <p class="total-texto">Todo en dólares ${escapeHtml(usd(s.todo_usd))}, menos el diezmo ${escapeHtml(usd(s.diezmo_usd))}.</p>
       <div class="cifras">
         <div><span>En bolivianos</span><strong class="num">${escapeHtml(bs(s.total_bs))}</strong></div>
         <div><span>En dólares</span><strong class="num">${escapeHtml(usd(s.total_usd))}</strong></div>
-        <div><span>Dólar paralelo</span><strong class="num">${escapeHtml(nf2.format(s.tc))}</strong></div>
+        <div><span>Dólar banco</span><strong class="num">${escapeHtml(nf2.format(s.tc_oficial))}</strong></div>
+        <div><span>Dólar paralelo</span><strong class="num">${escapeHtml(nf2.format(s.tc_paralelo))}</strong></div>
       </div>
-      ${fechaTc ? `<p class="pista">Tipo de cambio del ${escapeHtml(fmtDiaLargo.format(fechaTc))}, de Dólar Blue Bolivia.</p>` : ''}
+      <p class="pista">Las cuentas de banco se pasan a dólares con el dólar del banco; el efectivo, con el paralelo.</p>
     </div>
     <section class="bloque" aria-labelledby="t-cuentas">
       <h2 id="t-cuentas" class="bloque-titulo">Cuentas</h2>
       <ul class="filas">${s.cuentas.map(c => `
         <li class="fila fila-cuenta">
           <div class="fila-texto"><div class="fila-titulo">${escapeHtml(c.cuenta)}</div>
-          <div class="fila-meta">${c.diferencia ? `<span class="aviso-dif">La foto del ${escapeHtml(fechaCorta(c.foto.fecha))} difiere en ${escapeHtml(enMoneda(c.diferencia, c.moneda))}</span>`
-            : c.foto ? `Última foto: ${escapeHtml(fechaCorta(c.foto.fecha))}` : 'Sin fotos todavía'}</div></div>
+          <div class="fila-meta">${c.movimientos ? `${escapeHtml(enMoneda(c.foto.monto, c.moneda))} al ${escapeHtml(fechaCorta(c.foto.fecha))}, ${c.movimientos > 0 ? '+' : ''}${escapeHtml(numTxt(c.movimientos))} registrado después`
+            : `Revisado el ${escapeHtml(fechaCorta(c.foto.fecha))}`}</div></div>
           <span class="fila-monto num">${escapeHtml(enMoneda(c.saldo, c.moneda))}</span>
         </li>`).join('')}</ul>
-      <button type="button" class="btn-primario" id="btn-foto">Cargar los saldos de hoy</button>
-      <p class="pista">Revisá cada banco y anotá lo que muestra. Si no coincide con lo calculado, la planilla muestra la diferencia.</p>
+      <button type="button" class="btn-primario" id="btn-foto">Revisar saldos de hoy</button>
+      <p class="pista">Anotá lo que muestra cada cuenta: se agrega una columna nueva en la hoja SALDOS.</p>
     </section>`;
   $('#btn-foto').onclick = () => pintarFormFoto(s);
 }
@@ -763,6 +770,10 @@ function pintarFormFoto(s) {
     <form id="form-foto" class="bloque" novalidate>
       <h2 class="bloque-titulo">Saldos de hoy</h2>
       <p class="pista">Viene con lo que calcula la planilla. Cambiá solo lo que sea distinto.</p>
+      <div class="foto-fila">
+        <label for="foto-pendientes">Gastos pendientes (ya comprometidos)</label>
+        <div class="foto-entrada"><span>Bs</span><input id="foto-pendientes" class="campo num" inputmode="decimal" value="${escapeHtml(String(s.pendientes || '').replace('.', ','))}"></div>
+      </div>
       ${s.cuentas.map((c, i) => `
         <div class="foto-fila">
           <label for="foto-${i}">${escapeHtml(c.cuenta)}</label>
@@ -778,6 +789,7 @@ function pintarFormFoto(s) {
     const dif = leerMonto(inp.value) - Number(inp.dataset.calc);
     $(`#foto-dif-${i}`).textContent = Math.abs(dif) >= 1 ? `${dif > 0 ? '+' : ''}${numTxt(dif)} contra lo calculado` : '';
   }));
+  $('#foto-pendientes').addEventListener('input', e => { e.target.value = limpiarMonto(e.target.value); });
   $('#foto-cancelar').onclick = () => { cargandoFoto = false; pintarSaldos(s); };
   $('#form-foto').addEventListener('submit', async e => {
     e.preventDefault();
@@ -785,7 +797,7 @@ function pintarFormFoto(s) {
     const btn = e.target.querySelector('.btn-primario');
     btn.disabled = true; btn.textContent = 'Guardando…';
     try {
-      await api('/api/saldos', { method: 'POST', body: JSON.stringify({ id: nuevoId(), fecha: aIso(hoyBolivia()), saldos }) });
+      await api('/api/saldos', { method: 'POST', body: JSON.stringify({ id: nuevoId(), fecha: aIso(hoyBolivia()), saldos, pendientes: leerMonto($('#foto-pendientes').value) }) });
       toast('Saldos guardados');
       cargandoFoto = false;
       saldosCache = null;
