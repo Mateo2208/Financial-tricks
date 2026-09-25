@@ -34,6 +34,14 @@ def conn():
 
 
 def iniciar_db():
+    # Los procesos de gunicorn arrancan a la vez: crear tablas y pasar a WAL de a uno
+    DIR.mkdir(exist_ok=True)
+    with open(DIR / 'init.lock', 'w') as lk:
+        fcntl.flock(lk, fcntl.LOCK_EX)
+        _crear_tablas()
+
+
+def _crear_tablas():
     with conn() as c:
         c.execute('PRAGMA journal_mode=WAL')
         c.execute('''CREATE TABLE IF NOT EXISTS registros (
