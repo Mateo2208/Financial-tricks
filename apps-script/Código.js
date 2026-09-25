@@ -27,6 +27,9 @@ function doPost(e) {
   if (params.accion === "resumen") {
     return resumen_(params);
   }
+  if (params.accion === "planilla" && typeof planilla_ === "function") {
+    return planilla_(params);  // motor de la planilla nueva (Planilla.js)
+  }
   if (params.accion === "volcado" && typeof volcado_ === "function") {
     return volcado_(params);  // solo existe en pruebas (Volcado.js)
   }

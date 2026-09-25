@@ -1,44 +1,40 @@
 'use strict';
 
-// ===== Datos fijos de la planilla =====
-const CATEGORIAS = [
-  { id: 'comida', nombre: 'Comida', icono: 'i-comida', color: 'var(--c-comida)' },
-  { id: 'movilidad', nombre: 'Transporte', icono: 'i-movilidad', color: 'var(--c-movilidad)' },
-  { id: 'varios', nombre: 'Compras varias', icono: 'i-varios', color: 'var(--c-varios)' },
-  { id: 'servicios', nombre: 'Servicios básicos', icono: 'i-servicios', color: 'var(--c-servicios)' },
-];
-const CAT = Object.fromEntries(CATEGORIAS.map(c => [c.id, c]));
-const METODO_NOMBRE = { tarjeta: 'Tarjeta', efectivo: 'Efectivo' };
-// El valor es lo que se escribe en la columna AUTOR de la hoja
-const AUTORES = [
-  { id: 'EVER', nombre: 'Ever' },
-  { id: 'MA. NELFI', nombre: 'Ma. Nelfi' },
-];
+// Colores por categoría (los mismos que la planilla). Siempre acompañan al nombre.
+const COLOR_CAT = {
+  'Alimentación': 'var(--c-alimentacion)', 'Movilidad': 'var(--c-movilidad)', 'Servicios básicos': 'var(--c-servicios)',
+  'Varios': 'var(--c-varios)', 'Chicos': 'var(--c-chicos)', 'Consultorio': 'var(--c-consultorio)',
+  'Educación': 'var(--c-educacion)', 'Impuestos': 'var(--c-impuestos)', 'Compras grandes': 'var(--c-grandes)',
+  'Ingresos': 'var(--ok)',
+};
+const colorCat = c => COLOR_CAT[c] || 'var(--tinta-3)';
+// El valor es lo que se escribe en la columna Persona de la planilla
+const PERSONAS = [{ id: 'Ever', nombre: 'Ever' }, { id: 'Ma. Nelfi', nombre: 'Ma. Nelfi' }];
 
 const $ = sel => document.querySelector(sel);
 
 // ===== Guardado local (tolerante a navegadores que lo bloquean) =====
 const local = {
-  get(k, def) {
-    try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch { return def; }
-  },
+  get(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : JSON.parse(v); } catch { return def; } },
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* sin almacenamiento */ } },
   del(k) { try { localStorage.removeItem(k); } catch { /* idem */ } },
 };
 
 // ===== Formatos =====
-const fmtNumero = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
-function bs(n) {
-  const v = Math.round((Number(n) || 0) * 100) / 100;
-  const s = Number.isInteger(v) ? fmtNumero.format(v)
-    : new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(v);
-  return `Bs ${s}`;
-}
+const nf0 = new Intl.NumberFormat('es-BO', { maximumFractionDigits: 0 });
+const nf2 = new Intl.NumberFormat('es-BO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function numTxt(n) { const v = Math.round((Number(n) || 0) * 100) / 100; return Number.isInteger(v) ? nf0.format(v) : nf2.format(v); }
+const bs = n => (Number(n) < 0 ? `-Bs ${numTxt(-n)}` : `Bs ${numTxt(n)}`);
+const usd = n => (Number(n) < 0 ? `-$ ${numTxt(-n)}` : `$ ${numTxt(n)}`);
+const enMoneda = (n, moneda) => moneda === 'USD' ? usd(n) : bs(n);
 
 function escapeHtml(text) {
-  return String(text ?? '').replace(/[&<>"']/g, c => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-  }[c]));
+  return String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function normalizar(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
 // Fecha de hoy en Bolivia, sin importar la zona horaria del celular
@@ -49,15 +45,14 @@ function hoyBolivia() {
   return new Date(p.year, p.month - 1, p.day);
 }
 const dd = n => String(n).padStart(2, '0');
-const aPlanilla = d => `${dd(d.getDate())}/${dd(d.getMonth() + 1)}/${d.getFullYear()}`;      // dd/MM/yyyy
-const aInput = d => `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`;         // yyyy-MM-dd
-const deInput = s => { const [a, m, d] = s.split('-').map(Number); return new Date(a, m - 1, d); };
-const dePlanilla = s => { const [d, m, a] = s.split('/').map(Number); return new Date(a, m - 1, d); };
-const mismoDia = (a, b) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const aIso = d => `${d.getFullYear()}-${dd(d.getMonth() + 1)}-${dd(d.getDate())}`;
+const deIso = s => { const [a, m, d] = s.split('-').map(Number); return new Date(a, m - 1, d); };
+const mismoDia = (a, b) => aIso(a) === aIso(b);
 const fmtDiaLargo = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric', month: 'long' });
 const fmtDiaCorto = new Intl.DateTimeFormat('es-BO', { weekday: 'long', day: 'numeric' });
 const fmtMes = new Intl.DateTimeFormat('es-BO', { month: 'long', year: 'numeric' });
 const fmtMesSolo = new Intl.DateTimeFormat('es-BO', { month: 'long' });
+const mayus = s => s.charAt(0).toUpperCase() + s.slice(1);
 
 function textoFecha(d) {
   const hoy = hoyBolivia();
@@ -65,10 +60,10 @@ function textoFecha(d) {
   const largo = fmtDiaLargo.format(d);
   if (mismoDia(d, hoy)) return `Hoy, ${largo}`;
   if (mismoDia(d, ayer)) return `Ayer, ${largo}`;
-  return largo.charAt(0).toUpperCase() + largo.slice(1);
+  return mayus(largo);
 }
 
-// ===== Monto: se escribe con coma o punto, se guarda como número =====
+// ===== Monto: se escribe con coma o punto =====
 function limpiarMonto(txt) {
   let s = txt.replace(/[^\d.,]/g, '').replace(/\./g, ',');
   const i = s.indexOf(',');
@@ -86,23 +81,22 @@ class ErrorApi extends Error {
 async function api(ruta, opciones = {}) {
   let resp;
   try {
-    resp = await fetch(ruta, {
-      credentials: 'same-origin',
-      headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-      ...opciones,
-    });
+    resp = await fetch(ruta, { credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, ...opciones });
   } catch {
     throw new ErrorApi('Sin conexión con el servidor.', 0, true);
   }
   let data = null;
   try { data = await resp.json(); } catch { /* nginx responde HTML en sus propios errores */ }
-  if (resp.status === 401 && ruta !== '/api/login') {
-    mostrarLogin('Tu sesión venció. Volvé a entrar.');
-  }
+  if (resp.status === 401 && ruta !== '/api/login') mostrarLogin('Tu sesión venció. Volvé a entrar.');
   if (!resp.ok || !data || data.status !== 'success') {
     throw new ErrorApi((data && data.message) || `Error del servidor (${resp.status}). Probá de nuevo.`, resp.status);
   }
   return data;
+}
+
+function nuevoId() {
+  const r = Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('');
+  return `${Date.now().toString(36)}-${r}`;
 }
 
 // ===== Toast =====
@@ -117,10 +111,48 @@ function toast(texto, tipo = 'ok') {
   toastTimer = setTimeout(() => { el.hidden = true; }, tipo === 'ok' ? 2600 : 5000);
 }
 
-// ===== Pantallas =====
-function mostrar(id) {
-  for (const v of ['#vista-login', '#vista-autor', '#app']) $(v).hidden = v !== id;
+// ===== Catálogo (líneas, cuentas, reglas), guardado para usar sin señal =====
+let CAT = local.get('qc_catalogo', null);
+
+async function cargarCatalogo() {
+  try {
+    const c = await api('/api/catalogo');
+    CAT = c;
+    local.set('qc_catalogo', c);
+    sugerirDesdeDetalle();
+    pintarLinea(); pintarCuenta(); pintarFrecuentes();
+  } catch (err) {
+    if (!CAT && !err.sinRed && err.status !== 401) toast(err.message, 'error');
+  }
 }
+
+const lineasDe = tipo => (CAT ? CAT.lineas.filter(l => l.tipo === tipo) : []);
+const infoLinea = nombre => (CAT ? CAT.lineas.find(l => l.linea === nombre) : null);
+const cuentasActivas = () => (CAT ? CAT.cuentas.filter(c => c.activa) : []);
+
+function sugerirLinea(detalle, tipo) {
+  if (!CAT || !detalle) return null;
+  const d = ' ' + normalizar(detalle) + ' ';
+  for (const [patron, linea] of CAT.reglas) {
+    if (tipo && infoLinea(linea)?.tipo !== tipo) continue;  // "consulta": Salud si es gasto, Consultorio si es ingreso
+    if (new RegExp('(?<![a-z0-9])' + patron.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(d)) return { linea, patron };
+  }
+  return null;
+}
+
+function cuentaPorDefecto(quien, medio) {
+  const cs = cuentasActivas();
+  const clave = `${quien} · ${medio}`;
+  const recordada = local.get('qc_cuentas', {})[clave];
+  return (recordada && cs.find(c => c.cuenta === recordada))
+    || cs.find(c => c.defecto.includes(clave))
+    || cs.find(c => c.medio === medio && c.dueno === quien && c.moneda === 'Bs')
+    || cs.find(c => c.medio === medio && c.moneda === 'Bs')
+    || cs[0] || null;
+}
+
+// ===== Pantallas =====
+function mostrar(id) { for (const v of ['#vista-login', '#vista-autor', '#app']) $(v).hidden = v !== id; }
 
 function mostrarLogin(error = '') {
   local.del('qc_entro');
@@ -132,15 +164,17 @@ function mostrarLogin(error = '') {
 let volverA = null;
 function mostrarAutor() {
   const actual = local.get('qc_autor', null);
-  $('#lista-autores').innerHTML = AUTORES.map(a => `
+  $('#lista-autores').innerHTML = PERSONAS.map(a => `
     <button type="button" class="autor-opcion" data-autor="${escapeHtml(a.id)}" aria-pressed="${a.id === actual}">
       <span class="chip-inicial">${escapeHtml(a.nombre[0])}</span>${escapeHtml(a.nombre)}
     </button>`).join('');
   mostrar('#vista-autor');
 }
 
+const persona = () => local.get('qc_autor', PERSONAS[0].id);
+
 function pintarAutor() {
-  const a = AUTORES.find(x => x.id === local.get('qc_autor', null)) || AUTORES[0];
+  const a = PERSONAS.find(x => x.id === persona()) || PERSONAS[0];
   $('#autor-inicial').textContent = a.nombre[0];
   $('#autor-nombre').textContent = a.nombre;
 }
@@ -151,6 +185,8 @@ function entrarApp() {
   mostrar('#app');
   cambiarVista(volverA || 'registrar');
   volverA = null;
+  pintarCuenta(); pintarFrecuentes();
+  cargarCatalogo();
   enviarAutomaticos();
 }
 
@@ -158,60 +194,145 @@ function cambiarVista(nombre) {
   document.querySelectorAll('.tab').forEach(t => {
     if (t.dataset.vista === nombre) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
   });
-  $('#vista-registrar').hidden = nombre !== 'registrar';
-  $('#vista-resumen').hidden = nombre !== 'resumen';
+  for (const v of ['registrar', 'resumen', 'saldos']) $(`#vista-${v}`).hidden = v !== nombre;
   window.scrollTo(0, 0);
   if (nombre === 'resumen') cargarResumen();
+  if (nombre === 'saldos') cargarSaldos();
 }
 
 // ===== Formulario =====
-let fechaElegida = null; // null = hoy
+const estado = {
+  fecha: null,            // null = hoy
+  linea: null,            // línea elegida
+  lineaManual: false,     // la eligió la persona (no la sugerencia)
+  sugerida: null,         // {linea, patron}
+  cuenta: null,           // cuenta elegida a mano (si no, la de por defecto)
+};
 
-function fechaActual() { return fechaElegida || hoyBolivia(); }
+const tipoActual = () => document.querySelector('input[name="tipo"]:checked').value;
+const medioActual = () => document.querySelector('input[name="medio"]:checked')?.value || 'Banco';
+const fechaActual = () => estado.fecha || hoyBolivia();
+
+function cuentaActual() {
+  if (estado.cuenta) return cuentasActivas().find(c => c.cuenta === estado.cuenta) || null;
+  return cuentaPorDefecto(persona(), medioActual());
+}
 
 function pintarFecha() {
   $('#fecha-texto').textContent = textoFecha(fechaActual());
-  $('#btn-fecha').textContent = fechaElegida ? 'Volver a hoy' : 'Cambiar';
+  $('#btn-fecha').textContent = estado.fecha ? 'Volver a hoy' : 'Cambiar';
+}
+
+function pintarLinea() {
+  const l = estado.linea ? infoLinea(estado.linea) : null;
+  $('#linea-nombre').textContent = estado.linea || (tipoActual() === 'Gasto' ? 'Elegí la línea' : 'Elegí de dónde viene');
+  $('#linea-cat').textContent = l ? l.categoria : '';
+  $('#linea-punto').style.background = l ? colorCat(l.categoria) : 'var(--borde-fuerte)';
+  $('#btn-linea').classList.toggle('vacia', !estado.linea);
+  const pista = $('#linea-pista');
+  if (estado.linea && !estado.lineaManual && estado.sugerida) {
+    pista.innerHTML = `<svg class="ic"><use href="#i-magia"/></svg>Elegida sola por “${escapeHtml(estado.sugerida.patron)}”. Tocá para cambiarla.`;
+  } else pista.textContent = '';
+  actualizarBoton();
+}
+
+function pintarFrecuentes() {
+  const tipo = tipoActual();
+  const frec = ((CAT && CAT.frecuentes && CAT.frecuentes[persona()]) || []).filter(l => infoLinea(l)?.tipo === tipo);
+  const base = frec.length ? frec : lineasDe(tipo).slice(0, 6).map(l => l.linea);
+  $('#frecuentes').innerHTML = base.slice(0, 6).map(l => {
+    const i = infoLinea(l);
+    return `<button type="button" class="chip" data-linea="${escapeHtml(l)}" aria-pressed="${l === estado.linea}" style="--c:${colorCat(i && i.categoria)}"><span class="punto"></span>${escapeHtml(l)}</button>`;
+  }).join('');
+}
+
+function pintarCuenta() {
+  const c = cuentaActual();
+  $('#cuenta-nombre').textContent = c ? `${c.cuenta}${c.moneda === 'USD' ? ' (en dólares)' : ''}` : 'Elegí la cuenta';
+  actualizarBoton();
+}
+
+function pintarTipo() {
+  const ingreso = tipoActual() === 'Ingreso';
+  $('#detalle-label').textContent = ingreso ? '¿De qué?' : '¿En qué?';
+  $('#detalle').placeholder = ingreso ? 'Ej.: sueldo septiembre, consultas' : 'Ej.: hipermaxi, pan, gasolina kicks';
+  $('#linea-label').textContent = ingreso ? 'Tipo de ingreso' : 'Línea del presupuesto';
+  $('#medio-label').textContent = ingreso ? 'Entró a' : 'Pagado con';
+  if (estado.linea && infoLinea(estado.linea)?.tipo !== tipoActual()) { estado.linea = null; estado.lineaManual = false; }
+  sugerirDesdeDetalle();
+  pintarFrecuentes();
+  pintarLinea();
+}
+
+function sugerirDesdeDetalle() {
+  if (estado.lineaManual) return;
+  const s = sugerirLinea($('#detalle').value, tipoActual());
+  const valida = s && infoLinea(s.linea)?.tipo === tipoActual();
+  estado.sugerida = valida ? s : null;
+  estado.linea = valida ? s.linea : null;
 }
 
 function leerFormulario() {
-  const categoria = document.querySelector('input[name="categoria"]:checked')?.value || '';
-  const metodo = document.querySelector('input[name="metodo"]:checked')?.value || '';
-  const monto = leerMonto($('#monto').value);
-  const glosa = $('#glosa').value.trim();
-  return { categoria, metodo, monto, glosa, fecha: aPlanilla(fechaActual()) };
+  const c = cuentaActual();
+  return {
+    tipo: tipoActual(), monto: leerMonto($('#monto').value), detalle: $('#detalle').value.trim(),
+    linea: estado.linea, cuenta: c ? c.cuenta : '', moneda: c ? c.moneda : 'Bs', fecha: aIso(fechaActual()),
+  };
 }
 
 function faltante(f) {
   if (!(f.monto > 0)) return 'Ingresá el monto';
-  if (!f.categoria) return 'Elegí la categoría';
-  if (!f.metodo) return 'Elegí tarjeta o efectivo';
+  if (!f.linea) return f.tipo === 'Gasto' ? 'Elegí la línea' : 'Elegí de dónde viene';
+  if (!f.cuenta) return 'Elegí la cuenta';
   return '';
 }
 
 let enviando = false;
 function actualizarBoton() {
+  if (enviando) return;
   const f = leerFormulario();
   const falta = faltante(f);
   const btn = $('#btn-registrar');
-  if (enviando) return;
   btn.disabled = !!falta;
-  btn.innerHTML = falta ? escapeHtml(falta) : `Registrar <span class="num">${escapeHtml(bs(f.monto))}</span>`;
+  btn.innerHTML = falta ? escapeHtml(falta)
+    : `Registrar <span class="num">${escapeHtml(enMoneda(f.monto, f.moneda))}</span> <span class="btn-sub">en ${escapeHtml(f.linea)}</span>`;
   $('#btn-lista').disabled = !!falta;
 }
 
 function armarRegistro(f) {
-  const payload = { fecha: f.fecha, autor: local.get('qc_autor', AUTORES[0].id), glosa: f.glosa };
-  payload[`${f.categoria}_${f.metodo}`] = f.monto;
-  return { id: nuevoId(), payload, ...f, estado: 'lista', auto: false };
+  return {
+    id: nuevoId(), estado: 'lista', auto: false,
+    ...f,
+    payload: { fecha: f.fecha, tipo: f.tipo, linea: f.linea, monto: f.monto, cuenta: f.cuenta, persona: persona(), detalle: f.detalle },
+  };
 }
 
 function limpiarFormulario() {
   $('#monto').value = '';
-  $('#glosa').value = '';
-  document.querySelectorAll('input[name="categoria"]').forEach(i => { i.checked = false; });
-  $('#monto-error').textContent = '';
+  $('#detalle').value = '';
+  estado.linea = null; estado.lineaManual = false; estado.sugerida = null;
+  pintarLinea(); pintarFrecuentes();
   actualizarBoton();
+}
+
+// Si la persona corrigió la línea de un detalle corto, la app lo aprende (y la planilla también)
+function aprender(f) {
+  if (f.tipo !== 'Gasto' || !estado.lineaManual || !f.detalle) return;
+  const palabra = normalizar(f.detalle);
+  if (palabra.length < 3 || palabra.split(' ').length > 3) return;
+  if (estado.sugerida && estado.sugerida.linea === f.linea) return;
+  if (CAT) {
+    CAT.reglas = [[palabra, f.linea], ...CAT.reglas.filter(r => r[0] !== palabra)].sort((a, b) => b[0].length - a[0].length);
+    local.set('qc_catalogo', CAT);
+  }
+  api('/api/regla', { method: 'POST', body: JSON.stringify({ palabra, linea: f.linea, quien: persona() }) }).catch(() => {});
+}
+
+function recordarCuenta(f) {
+  if (!estado.cuenta) return;
+  const m = local.get('qc_cuentas', {});
+  m[`${persona()} · ${medioActual()}`] = f.cuenta;
+  local.set('qc_cuentas', m);
 }
 
 async function registrar(e) {
@@ -219,6 +340,8 @@ async function registrar(e) {
   const f = leerFormulario();
   if (faltante(f) || enviando) return;
   const reg = armarRegistro(f);
+  aprender(f);
+  recordarCuenta(f);
 
   if (!navigator.onLine) {
     guardarPendiente({ ...reg, auto: true });
@@ -226,17 +349,14 @@ async function registrar(e) {
     toast('Sin señal: quedó guardado en el celular y se envía solo.', 'offline');
     return;
   }
-
   enviando = true;
   const btn = $('#btn-registrar');
   btn.disabled = true;
   btn.textContent = 'Guardando…';
   try {
     await enviarAlServidor(reg);
-    const input = $('#monto');
-    input.classList.add('registrado');
-    setTimeout(() => { input.classList.remove('registrado'); limpiarFormulario(); }, 420);
-    toast(`Guardado: ${bs(f.monto)} en ${CAT[f.categoria].nombre}`);
+    limpiarFormulario();  // al instante: si ya empieza a escribir el siguiente, no se le borra
+    toast(`Guardado: ${enMoneda(f.monto, f.moneda)} en ${f.linea}`);
   } catch (err) {
     if (err.sinRed || err.status >= 500) {
       guardarPendiente({ ...reg, auto: true });
@@ -254,24 +374,20 @@ async function registrar(e) {
 function agregarALista() {
   const f = leerFormulario();
   if (faltante(f)) return;
+  aprender(f);
+  recordarCuenta(f);
   guardarPendiente(armarRegistro(f));
   limpiarFormulario();
   $('#monto').focus();
-  toast(`Agregado a la lista: ${bs(f.monto)}`);
+  toast(`Agregado a la lista: ${enMoneda(f.monto, f.moneda)}`);
 }
 
-// ===== Envío: el servidor acepta al instante y anota en la hoja por detrás =====
-function nuevoId() {
-  const r = crypto.getRandomValues ? Array.from(crypto.getRandomValues(new Uint8Array(6)), b => b.toString(16).padStart(2, '0')).join('')
-    : Math.random().toString(16).slice(2, 14);
-  return `${Date.now().toString(36)}-${r}`;
-}
-
+// ===== Envío: el servidor acepta al instante y anota en la planilla por detrás =====
 async function enviarAlServidor(reg) {
   await api('/api/registro', { method: 'POST', body: JSON.stringify({ ...reg.payload, id: reg.id }) });
-  const { auto, estado, error, ...guardar } = reg;
+  const { auto, estado: _e, error, ...guardar } = reg;
   local.set('qc_seguimiento', [...local.get('qc_seguimiento', []).filter(x => x.id !== reg.id), guardar]);
-  resumenCache.delete(reg.fecha.slice(3));
+  resumenCache.clear(); saldosCache = null;
   pintarAnotando();
   seguir();
 }
@@ -286,16 +402,13 @@ async function revisarSeguimiento() {
   const lista = local.get('qc_seguimiento', []);
   if (!lista.length || !navigator.onLine) { seguir(5000); return; }
   let r;
-  try {
-    r = await api(`/api/registros?ids=${lista.map(x => x.id).join(',')}`);
-  } catch { seguir(8000); return; }
+  try { r = await api(`/api/registros?ids=${lista.map(x => x.id).join(',')}`); } catch { seguir(8000); return; }
   const porId = Object.fromEntries(r.registros.map(x => [x.id, x]));
   const siguen = [];
   let errores = 0;
   for (const reg of lista) {
     const e = porId[reg.id];
-    if (!e) continue;                    // el servidor no lo conoce: nada que seguir
-    if (e.estado === 'hecho') { resumenCache.delete(reg.fecha.slice(3)); continue; }
+    if (!e || e.estado === 'hecho') continue;
     if (e.estado === 'error') {
       errores++;
       guardarPendiente({ ...reg, id: nuevoId(), estado: 'lista', auto: false, error: `La planilla lo rechazó: ${e.error}` });
@@ -305,7 +418,7 @@ async function revisarSeguimiento() {
   }
   local.set('qc_seguimiento', siguen);
   pintarAnotando();
-  if (errores) toast(`${errores === 1 ? 'Un gasto no se pudo anotar' : `${errores} gastos no se pudieron anotar`}. Está en "Por registrar".`, 'error');
+  if (errores) toast(`${errores === 1 ? 'Un movimiento no se pudo anotar' : `${errores} movimientos no se pudieron anotar`}. Está en "Por registrar".`, 'error');
   seguir(siguen.length ? 3000 : 0);
 }
 
@@ -313,65 +426,45 @@ function pintarAnotando() {
   const n = local.get('qc_seguimiento', []).length;
   const el = $('#anotando');
   el.hidden = n === 0;
-  el.querySelector('span').textContent = n === 1 ? 'Anotando 1 gasto en la planilla…' : `Anotando ${n} gastos en la planilla…`;
+  el.querySelector('span').textContent = n === 1 ? 'Anotando 1 movimiento en la planilla…' : `Anotando ${n} movimientos en la planilla…`;
 }
 
 // ===== Pendientes (lista y registros sin señal) =====
-function pendientes() { return local.get('qc_pendientes', []); }
+function pendientes() { return local.get('qc_pendientes', []).filter(p => p.payload && p.payload.linea); }
 function guardarPendientes(lista) { local.set('qc_pendientes', lista); pintarPendientes(); }
 function guardarPendiente(reg) { guardarPendientes([...pendientes(), reg]); }
 function quitarPendiente(id) { guardarPendientes(pendientes().filter(p => p.id !== id)); }
 
+let enviandoLista = false;
 function pintarPendientes() {
   const lista = pendientes();
   $('#pendientes').hidden = lista.length === 0;
   if (!lista.length) return;
-  const total = lista.reduce((s, p) => s + p.monto, 0);
-  $('#pendientes-total').textContent = bs(total);
-  const hoy = aPlanilla(hoyBolivia());
+  $('#pendientes-total').textContent = bs(lista.reduce((s, p) => s + (p.tipo === 'Gasto' ? p.monto : 0), 0));
+  const hoy = aIso(hoyBolivia());
   $('#pendientes-lista').innerHTML = lista.map(p => {
-    const c = CAT[p.categoria];
-    const meta = [
-      p.glosa,
-      p.fecha !== hoy ? textoFecha(dePlanilla(p.fecha)) : '',
-      p.auto && p.estado === 'lista' ? 'Se envía solo al volver la señal' : '',
-      p.error || '',
-    ].filter(Boolean).map(escapeHtml).join('. ');
-    const dudoso = p.estado === 'dudoso';
+    const i = infoLinea(p.linea);
+    const meta = [p.detalle, p.cuenta, p.fecha !== hoy ? textoFecha(deIso(p.fecha)) : '',
+      p.auto ? 'Se envía solo al volver la señal' : '', p.error || ''].filter(Boolean).map(escapeHtml).join('. ');
     return `
-      <li class="fila" style="--c:${c.color}">
+      <li class="fila" style="--c:${colorCat(i && i.categoria)}">
         <span class="punto" aria-hidden="true"></span>
-        <div class="fila-texto">
-          <div class="fila-titulo">${escapeHtml(c.nombre)}, ${escapeHtml(METODO_NOMBRE[p.metodo].toLowerCase())}</div>
-          ${dudoso ? '<div class="fila-estado dudoso">Puede que ya esté en la planilla. Revisá antes de reenviar.</div>' : ''}
-          ${meta ? `<div class="fila-meta">${meta}</div>` : ''}
-        </div>
-        <span class="fila-monto num">${escapeHtml(bs(p.monto))}</span>
-        <div class="fila-acciones">
-          ${dudoso ? `<button type="button" class="btn-icono" data-reenviar="${p.id}" aria-label="Reenviar ${escapeHtml(bs(p.monto))}"><svg class="ic"><use href="#i-reintentar"/></svg></button>` : ''}
-          <button type="button" class="btn-icono" data-quitar="${p.id}" aria-label="Quitar ${escapeHtml(bs(p.monto))} de la lista"><svg class="ic"><use href="#i-x"/></svg></button>
-        </div>
+        <div class="fila-texto"><div class="fila-titulo">${p.tipo === 'Ingreso' ? 'Ingreso: ' : ''}${escapeHtml(p.linea)}</div>${meta ? `<div class="fila-meta">${meta}</div>` : ''}</div>
+        <span class="fila-monto num${p.tipo === 'Ingreso' ? ' ingreso' : ''}">${escapeHtml(enMoneda(p.monto, p.moneda))}</span>
+        <div class="fila-acciones"><button type="button" class="btn-icono" data-quitar="${p.id}" aria-label="Quitar de la lista"><svg class="ic"><use href="#i-x"/></svg></button></div>
       </li>`;
   }).join('');
-  const enviables = lista.filter(p => p.estado !== 'dudoso');
   const btn = $('#btn-enviar-lista');
-  btn.hidden = enviables.length === 0;
-  const totalEnv = enviables.reduce((s, p) => s + p.monto, 0);
   if (!enviandoLista) {
     btn.disabled = false;
-    btn.innerHTML = enviables.length === 1
-      ? `Registrar <span class="num">${escapeHtml(bs(totalEnv))}</span>`
-      : `Registrar los ${enviables.length} <span class="num">(${escapeHtml(bs(totalEnv))})</span>`;
+    btn.textContent = lista.length === 1 ? 'Registrar' : `Registrar los ${lista.length}`;
   }
 }
 
-let enviandoLista = false;
-// Manda de a uno; cada registro confirmado sale de la lista al instante, así un
-// corte a mitad de camino no deja duplicados al reintentar.
-async function enviarLista(soloAutomaticos = false, soloId = null) {
+// Manda de a uno; cada registro aceptado sale de la lista al instante (el id evita duplicados)
+async function enviarLista(soloAutomaticos = false) {
   if (enviandoLista || !navigator.onLine) return;
-  const cola = pendientes().filter(p => soloId ? p.id === soloId
-    : (p.estado !== 'dudoso' && (!soloAutomaticos || p.auto)));
+  const cola = pendientes().filter(p => !soloAutomaticos || p.auto);
   if (!cola.length) return;
   enviandoLista = true;
   const btn = $('#btn-enviar-lista');
@@ -381,176 +474,226 @@ async function enviarLista(soloAutomaticos = false, soloId = null) {
     const p = cola[i];
     btn.textContent = `Guardando ${i + 1} de ${cola.length}…`;
     try {
-      // Un reintento de algo "dudoso" (versión anterior) va con id nuevo a propósito:
-      // el usuario ya revisó la hoja y eligió reenviar.
-      await enviarAlServidor(p.estado === 'dudoso' ? { ...p, id: nuevoId() } : p);
+      await enviarAlServidor(p);
       ok++;
       guardarPendientes(pendientes().filter(x => x.id !== p.id));
     } catch (err) {
       if (err.status === 401) break;
       ultimoError = err.message;
-      guardarPendientes(pendientes().map(x => x.id !== p.id ? x : {
-        ...x, estado: 'lista', error: err.sinRed ? '' : err.message,
-      }));
+      guardarPendientes(pendientes().map(x => x.id !== p.id ? x : { ...x, error: err.sinRed ? '' : err.message }));
       if (err.sinRed || err.status >= 500) break;
     }
   }
   enviandoLista = false;
   pintarPendientes();
-  if (ok === cola.length) {
-    toast(ok === 1 ? 'Guardado' : `${ok} gastos guardados`);
-  } else if (!soloAutomaticos || ok > 0) {
-    toast(`${ok} de ${cola.length} registrados. ${ultimoError}`, 'error');
-  }
+  if (ok === cola.length) toast(ok === 1 ? 'Guardado' : `${ok} movimientos guardados`);
+  else if (!soloAutomaticos || ok > 0) toast(`${ok} de ${cola.length} guardados. ${ultimoError}`, 'error');
 }
 
 function enviarAutomaticos() { if (navigator.onLine) { enviarLista(true); seguir(0); } }
+function pintarConexion() { $('#aviso-offline').hidden = navigator.onLine; }
 
-function pintarConexion() {
-  $('#aviso-offline').hidden = navigator.onLine;
+// ===== Selector (hoja inferior) =====
+let alElegir = null;
+function abrirSelector(titulo, grupos, elegido, callback) {
+  alElegir = callback;
+  $('#selector-titulo').textContent = titulo;
+  $('#selector-buscar').value = '';
+  $('#selector-lista').innerHTML = grupos.map(g => `
+    <div class="hoja-grupo" data-grupo>
+      ${g.titulo ? `<p class="hoja-grupo-titulo" style="color:${g.color || 'var(--tinta-2)'}">${escapeHtml(g.titulo)}</p>` : ''}
+      ${g.items.map(it => `<button type="button" class="hoja-item" data-valor="${escapeHtml(it.valor)}" data-buscar="${escapeHtml(normalizar(it.texto + ' ' + (g.titulo || '')))}" aria-pressed="${it.valor === elegido}">
+        <span class="punto" style="background:${g.color || 'var(--tinta-3)'}"></span><span>${escapeHtml(it.texto)}</span>${it.sub ? `<span class="suave hoja-sub">${escapeHtml(it.sub)}</span>` : ''}
+        ${it.valor === elegido ? '<svg class="ic"><use href="#i-check"/></svg>' : ''}</button>`).join('')}
+    </div>`).join('');
+  const dlg = $('#selector');
+  if (typeof dlg.showModal === 'function') dlg.showModal(); else dlg.setAttribute('open', '');
+}
+
+function cerrarSelector() {
+  const dlg = $('#selector');
+  if (typeof dlg.close === 'function') dlg.close(); else dlg.removeAttribute('open');
+}
+
+function elegirLinea() {
+  const tipo = tipoActual();
+  const grupos = [];
+  for (const l of lineasDe(tipo)) {
+    let g = grupos.find(x => x.titulo === l.categoria);
+    if (!g) grupos.push(g = { titulo: l.categoria, color: colorCat(l.categoria), items: [] });
+    g.items.push({ valor: l.linea, texto: l.linea });
+  }
+  abrirSelector(tipo === 'Gasto' ? 'Línea del presupuesto' : 'Tipo de ingreso', grupos, estado.linea, v => {
+    estado.linea = v; estado.lineaManual = true;
+    pintarLinea(); pintarFrecuentes();
+  });
+}
+
+function elegirCuenta() {
+  const grupos = [];
+  for (const c of cuentasActivas()) {
+    const titulo = c.medio === 'Banco' ? 'Bancos' : c.medio;
+    let g = grupos.find(x => x.titulo === titulo);
+    if (!g) grupos.push(g = { titulo, items: [] });
+    g.items.push({ valor: c.cuenta, texto: c.cuenta, sub: c.moneda === 'USD' ? 'dólares' : '' });
+  }
+  abrirSelector(tipoActual() === 'Gasto' ? '¿De qué cuenta salió?' : '¿A qué cuenta entró?', grupos, cuentaActual()?.cuenta, v => {
+    estado.cuenta = v;
+    const c = cuentasActivas().find(x => x.cuenta === v);
+    if (c && c.medio !== 'Cripto') {
+      const r = document.querySelector(`input[name="medio"][value="${c.medio}"]`);
+      if (r) r.checked = true;
+    }
+    pintarCuenta();
+  });
 }
 
 // ===== Resumen =====
-const resumenCache = new Map(); // "MM/AAAA" -> respuesta
-let mesVista = null;             // Date del día 1 del mes que se ve
-
-function claveMes(d) { return `${dd(d.getMonth() + 1)}/${d.getFullYear()}`; }
+const resumenCache = new Map();
+let mesVista = null;
+let intentosActualizar = 0;
+let movimientosVisibles = 30;
+const claveMes = d => `${d.getFullYear()}-${dd(d.getMonth() + 1)}`;
 
 async function cargarResumen(forzar = false) {
   const hoy = hoyBolivia();
   if (!mesVista) mesVista = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
   const clave = claveMes(mesVista);
-  const esMesActual = mesVista.getFullYear() === hoy.getFullYear() && mesVista.getMonth() === hoy.getMonth();
-  const titulo = fmtMes.format(mesVista);
-  $('#t-resumen').textContent = titulo.charAt(0).toUpperCase() + titulo.slice(1);
-  $('#mes-sig').disabled = esMesActual;
+  const esActual = clave === claveMes(hoy);
+  $('#t-resumen').textContent = mayus(fmtMes.format(mesVista));
+  $('#mes-sig').disabled = esActual;
   const cuerpo = $('#resumen-cuerpo');
 
   const guardado = !forzar && resumenCache.get(clave);
-  if (guardado && !guardado.actualizando) { pintarResumen(guardado, esMesActual); return; }
-
-  // Lo último que vio este celular se muestra al instante mientras llega lo nuevo
-  const copia = guardado || local.get(`qc_resumen_${clave}`, null);
-  if (copia) pintarResumen(copia, esMesActual);
+  if (guardado && !guardado.actualizando) { pintarResumen(guardado, esActual); return; }
+  const copia = guardado || local.get(`qc_res_${clave}`, null);
+  if (copia) pintarResumen(copia, esActual);
   else cuerpo.innerHTML = '<div class="esqueleto" aria-label="Cargando"><i></i><i></i><i></i><i></i></div>';
   try {
-    const data = await api(`/api/resumen?mes=${encodeURIComponent(clave)}`);
+    const data = await api(`/api/resumen?mes=${clave}`);
     resumenCache.set(clave, data);
-    local.set(`qc_resumen_${clave}`, data);
-    if (claveMes(mesVista) === clave) pintarResumen(data, esMesActual);
-    // El servidor respondió con su copia y está leyendo la hoja: volver a pedir en un rato
+    local.set(`qc_res_${clave}`, data);
+    if (claveMes(mesVista) === clave) pintarResumen(data, esActual);
     if (data.actualizando && intentosActualizar < 4) {
       intentosActualizar++;
       setTimeout(() => { if (claveMes(mesVista) === clave && !$('#vista-resumen').hidden) cargarResumen(true); }, 3500);
     } else intentosActualizar = 0;
   } catch (err) {
-    if (copia && claveMes(mesVista) === clave) return; // queda la copia a la vista
-    if (err.status === 401 || claveMes(mesVista) !== clave) return;
-    const viejo = local.get(`qc_resumen_${clave}`, null);
-    if (viejo) {
-      pintarResumen(viejo, esMesActual);
-      cuerpo.insertAdjacentHTML('afterbegin',
-        `<div class="aviso"><svg class="ic"><use href="#i-offline"/></svg><span>Mostrando lo último que se cargó en este celular. ${escapeHtml(err.message)}</span></div>`);
-      return;
-    }
-    cuerpo.innerHTML = `
-      <div class="error-bloque">
-        <p>${escapeHtml(err.message)}</p>
-        <button type="button" class="btn-secundario" id="btn-reintentar-resumen"><svg class="ic"><use href="#i-reintentar"/></svg>Reintentar</button>
-      </div>`;
+    if (copia || err.status === 401 || claveMes(mesVista) !== clave) return;
+    cuerpo.innerHTML = `<div class="error-bloque"><p>${escapeHtml(err.message)}</p>
+      <button type="button" class="btn-secundario" id="btn-reintentar-resumen"><svg class="ic"><use href="#i-reintentar"/></svg>Reintentar</button></div>`;
     $('#btn-reintentar-resumen').onclick = () => cargarResumen(true);
   }
 }
 
-let movimientosVisibles = 30;
-let intentosActualizar = 0;
+function barra(real, pres, color) {
+  if (!pres) return `<span class="pista-barra sin-pres" aria-hidden="true"><i style="width:100%;background:${color}"></i></span>`;
+  const pct = Math.min(real / pres, 1) * 100;
+  const pasado = real > pres;
+  return `<span class="pista-barra${pasado ? ' pasado' : ''}" aria-hidden="true"><i style="width:${pct}%;background:${pasado ? 'var(--err)' : color}"></i></span>`;
+}
 
-function pintarResumen(r, esMesActual) {
+function textoUso(real, pres) {
+  if (!pres) return 'Sin presupuesto';
+  const q = pres - real;
+  return q >= 0 ? `Quedan ${bs(q)}` : `Se pasó por ${bs(-q)}`;
+}
+
+function pintarResumen(r, esActual) {
   const cuerpo = $('#resumen-cuerpo');
   const nombreMes = fmtMesSolo.format(mesVista);
-  if (!r.total) {
-    cuerpo.innerHTML = `<div class="vacio"><strong>Sin gastos en ${escapeHtml(nombreMes)}</strong>Lo que registres este mes va a aparecer acá.</div>`;
+  const pres = r.presupuesto_mensual + r.presupuesto_anual;
+  if (!r.gastado && !r.ingresos && !pres) {
+    cuerpo.innerHTML = `<div class="vacio"><strong>Sin movimientos en ${escapeHtml(nombreMes)}</strong>Lo que registres este mes va a aparecer acá.</div>`;
     return;
   }
+  const abiertas = new Set(local.get('qc_cat_abiertas', []));
+  const pctTotal = pres ? r.gastado / pres : 0;
 
-  const cats = CATEGORIAS
-    .map(c => ({ ...c, t: r.categorias[c.id].tarjeta, e: r.categorias[c.id].efectivo }))
-    .map(c => ({ ...c, total: c.t + c.e }))
-    .sort((a, b) => b.total - a.total);
-  const max = Math.max(...cats.map(c => c.total), 1);
-  const pctTarjeta = r.total ? (r.tarjeta / r.total) * 100 : 0;
-
-  // Movimientos agrupados por día (ya vienen del más nuevo al más viejo)
   const dias = [];
   for (const m of r.movimientos.slice(0, movimientosVisibles)) {
     if (!dias.length || dias[dias.length - 1].fecha !== m.fecha) dias.push({ fecha: m.fecha, items: [] });
     dias[dias.length - 1].items.push(m);
   }
-  const autorNombre = id => (AUTORES.find(a => a.id === id) || { nombre: id }).nombre;
 
   cuerpo.innerHTML = `
     <div class="total">
-      <p class="total-monto"><span class="moneda">Bs</span>${escapeHtml(bs(r.total).slice(3))}</p>
-      <p class="total-texto">gastados en ${escapeHtml(nombreMes)}${esMesActual ? `. Hoy: <strong class="num">${escapeHtml(bs(r.hoy))}</strong>` : ''}</p>
+      <p class="total-texto-arriba">Gastado en ${escapeHtml(nombreMes)}</p>
+      <p class="total-monto"><span class="moneda">Bs</span>${escapeHtml(numTxt(r.gastado))}</p>
+      ${pres ? `<div class="total-barra">${barra(r.gastado, pres, 'var(--tinta)')}</div>
+        <p class="total-texto">${Math.round(pctTotal * 100)}% de ${escapeHtml(bs(pres))} presupuestados. <strong>${escapeHtml(textoUso(r.gastado, pres))}</strong></p>`
+        : '<p class="total-texto">Sin presupuesto cargado para este mes.</p>'}
+      <div class="cifras">
+        <div><span>Ingresos</span><strong class="num ingreso">${escapeHtml(bs(r.ingresos))}</strong></div>
+        <div><span>Resultado</span><strong class="num ${r.resultado < 0 ? 'negativo' : 'ingreso'}">${escapeHtml(bs(r.resultado))}</strong></div>
+        ${esActual ? `<div><span>Hoy</span><strong class="num">${escapeHtml(bs(r.hoy))}</strong></div>` : ''}
+      </div>
+      ${r.anotando ? `<p class="anotando"><i aria-hidden="true"></i><span>${r.anotando} todavía anotándose en la planilla (ya están sumados)</span></p>` : ''}
     </div>
 
-    <section class="bloque" aria-labelledby="t-pago">
-      <h2 id="t-pago" class="bloque-titulo">Cómo se pagó</h2>
-      <div class="reparto" role="img" aria-label="Tarjeta ${Math.round(pctTarjeta)}%, efectivo ${Math.round(100 - pctTarjeta)}%">
-        <i class="tarjeta" style="width:${pctTarjeta}%"></i><i class="efectivo" style="width:${100 - pctTarjeta}%"></i>
-      </div>
-      <div class="reparto-leyenda">
-        <span><i class="cuadrito" style="background:var(--tinta)"></i>Tarjeta <strong class="num">${escapeHtml(bs(r.tarjeta))}</strong></span>
-        <span><i class="cuadrito" style="background:var(--tinta-3)"></i>Efectivo <strong class="num">${escapeHtml(bs(r.efectivo))}</strong></span>
-      </div>
-    </section>
-
     <section class="bloque" aria-labelledby="t-cat">
-      <h2 id="t-cat" class="bloque-titulo">Por categoría</h2>
-      <ul class="barras">
-        ${cats.map(c => `
-          <li class="barra-cat" style="--c:${c.color}">
-            <span class="barra-cat-nombre"><svg class="ic"><use href="#${c.icono}"/></svg>${escapeHtml(c.nombre)}</span>
-            <span class="barra-cat-monto num">${escapeHtml(bs(c.total))}</span>
-            <span class="barra-cat-pista" aria-hidden="true"><i style="width:${(c.total / max) * 100}%"></i></span>
-            ${c.t && c.e ? `<span class="barra-cat-detalle">Tarjeta ${escapeHtml(bs(c.t))}, efectivo ${escapeHtml(bs(c.e))}</span>`
-              : c.total ? `<span class="barra-cat-detalle">Todo con ${c.t ? 'tarjeta' : 'efectivo'}</span>` : ''}
-          </li>`).join('')}
+      <h2 id="t-cat" class="bloque-titulo">Presupuesto contra real</h2>
+      <ul class="cats">
+        ${r.categorias.map(c => {
+          const color = colorCat(c.categoria);
+          const abierta = abiertas.has(c.categoria);
+          return `<li class="cat" style="--c:${color}">
+            <button type="button" class="cat-cabeza" data-cat="${escapeHtml(c.categoria)}" aria-expanded="${abierta}">
+              <span class="cat-nombre"><span class="punto"></span>${escapeHtml(c.categoria)}</span>
+              <span class="cat-monto num">${escapeHtml(bs(c.real))}</span>
+              ${barra(c.real, c.presupuesto, color)}
+              <span class="cat-uso">${escapeHtml(c.presupuesto ? `de ${bs(c.presupuesto)}. ${textoUso(c.real, c.presupuesto)}` : 'Sin presupuesto')}</span>
+              <svg class="ic cat-flecha"><use href="#i-abajo"/></svg>
+            </button>
+            <ul class="lineas" ${abierta ? '' : 'hidden'}>
+              ${c.lineas.map(l => `<li class="linea-fila">
+                <span class="linea-nombre">${escapeHtml(l.linea)}${l.anual ? ' <span class="etiqueta">anual</span>' : ''}</span>
+                <span class="num">${escapeHtml(bs(l.real))}</span>
+                ${barra(l.real, l.presupuesto, color)}
+                <span class="cat-uso">${escapeHtml(l.presupuesto ? `de ${bs(l.presupuesto)}. ${textoUso(l.real, l.presupuesto)}` : 'Sin presupuesto')}</span>
+              </li>`).join('')}
+            </ul>
+          </li>`;
+        }).join('')}
       </ul>
     </section>
 
-    <section class="bloque" aria-labelledby="t-autor">
-      <h2 id="t-autor" class="bloque-titulo">Por persona</h2>
-      <ul class="autores-lista">
-        ${Object.entries(r.autores).map(([a, v]) => `
-          <li><span>${escapeHtml(autorNombre(a))}</span><strong class="num">${escapeHtml(bs(v))}</strong></li>`).join('')}
-      </ul>
-    </section>
+    ${r.ingresos_por_linea.length ? `<section class="bloque" aria-labelledby="t-ing">
+      <h2 id="t-ing" class="bloque-titulo">Ingresos</h2>
+      <ul class="lista-simple">${r.ingresos_por_linea.map(i => `<li><span>${escapeHtml(i.linea)}</span><strong class="num ingreso">${escapeHtml(bs(i.monto))}</strong></li>`).join('')}</ul>
+    </section>` : ''}
+
+    ${Object.keys(r.por_persona).length ? `<section class="bloque" aria-labelledby="t-per">
+      <h2 id="t-per" class="bloque-titulo">Gastado por persona</h2>
+      <ul class="lista-simple">${Object.entries(r.por_persona).map(([p, v]) => `<li><span>${escapeHtml(p)}</span><strong class="num">${escapeHtml(bs(v))}</strong></li>`).join('')}</ul>
+    </section>` : ''}
 
     <section class="bloque" aria-labelledby="t-mov">
       <h2 id="t-mov" class="bloque-titulo">Movimientos</h2>
-      ${dias.map(d => `
-        <div class="dia">
-          <div class="dia-cabeza"><span>${escapeHtml(fmtDiaCorto.format(dePlanilla(d.fecha)))}</span><span class="num">${escapeHtml(bs(r.dias[d.fecha]))}</span></div>
-          <ul class="filas">
-            ${d.items.map(m => {
-              const c = CAT[m.categoria];
-              const meta = [m.anotando ? 'Anotando en la planilla…' : '', m.glosa, autorNombre(m.autor), METODO_NOMBRE[m.metodo]].filter(Boolean).map(escapeHtml).join(', ');
-              return `
-                <li class="fila" style="--c:${c.color}">
-                  <span class="punto" aria-hidden="true"></span>
-                  <div class="fila-texto"><div class="fila-titulo">${escapeHtml(c.nombre)}</div><div class="fila-meta">${meta}</div></div>
-                  <span class="fila-monto num">${escapeHtml(bs(m.monto))}</span>
-                </li>`;
-            }).join('')}
-          </ul>
-        </div>`).join('')}
-      ${r.movimientos.length > movimientosVisibles
-        ? `<button type="button" class="btn-secundario" id="btn-mas">Ver ${Math.min(30, r.movimientos.length - movimientosVisibles)} más</button>` : ''}
+      ${dias.map(d => `<div class="dia">
+        <div class="dia-cabeza"><span>${escapeHtml(fmtDiaCorto.format(deIso(d.fecha)))}</span></div>
+        <ul class="filas">${d.items.map(m => {
+          const meta = [m.anotando ? 'Anotando en la planilla…' : '', m.detalle, m.persona, m.cuenta].filter(Boolean).map(escapeHtml).join(', ');
+          return `<li class="fila fila-mov" style="--c:${colorCat(m.tipo === 'Ingreso' ? 'Ingresos' : m.categoria)}">
+            <span class="punto" aria-hidden="true"></span>
+            <div class="fila-texto"><div class="fila-titulo">${escapeHtml(m.linea || m.tipo)}</div><div class="fila-meta">${meta}</div></div>
+            <span class="fila-monto num${m.tipo === 'Ingreso' ? ' ingreso' : ''}">${m.tipo === 'Ingreso' ? '+' : ''}${escapeHtml(bs(m.monto_bs))}</span>
+          </li>`;
+        }).join('')}</ul></div>`).join('')}
+      ${r.movimientos.length > movimientosVisibles ? `<button type="button" class="btn-secundario" id="btn-mas">Ver ${Math.min(30, r.movimientos.length - movimientosVisibles)} más</button>` : ''}
     </section>`;
 
+  cuerpo.querySelectorAll('.cat-cabeza').forEach(b => b.addEventListener('click', () => {
+    const lista = b.nextElementSibling;
+    const abrir = lista.hidden;
+    lista.hidden = !abrir;
+    b.setAttribute('aria-expanded', String(abrir));
+    const s = new Set(local.get('qc_cat_abiertas', []));
+    if (abrir) s.add(b.dataset.cat); else s.delete(b.dataset.cat);
+    local.set('qc_cat_abiertas', [...s]);
+  }));
   const mas = $('#btn-mas');
-  if (mas) mas.onclick = () => { movimientosVisibles += 30; pintarResumen(r, esMesActual); };
+  if (mas) mas.onclick = () => { movimientosVisibles += 30; pintarResumen(r, esActual); };
 }
 
 function moverMes(delta) {
@@ -559,15 +702,103 @@ function moverMes(delta) {
   cargarResumen();
 }
 
-// ===== Arranque =====
-function armarCategorias() {
-  $('#categorias').innerHTML = CATEGORIAS.map(c => `
-    <label class="categoria">
-      <input type="radio" name="categoria" value="${c.id}">
-      <span style="--c:${c.color}"><svg class="ic"><use href="#${c.icono}"/></svg>${escapeHtml(c.nombre)}</span>
-    </label>`).join('');
+// ===== Saldos =====
+let saldosCache = null;
+let cargandoFoto = false;
+const fechaCorta = iso => iso.split('-').reverse().join('/');
+
+async function cargarSaldos(forzar = false) {
+  const cuerpo = $('#saldos-cuerpo');
+  const copia = (!forzar && saldosCache) || local.get('qc_saldos', null);
+  if (copia && !cargandoFoto) pintarSaldos(copia);
+  else if (!copia) cuerpo.innerHTML = '<div class="esqueleto" aria-label="Cargando"><i></i><i></i><i></i></div>';
+  try {
+    const s = await api('/api/saldos');
+    saldosCache = s;
+    local.set('qc_saldos', s);
+    if (!cargandoFoto) pintarSaldos(s);
+    if (s.actualizando) setTimeout(() => { if (!$('#vista-saldos').hidden && !cargandoFoto) cargarSaldos(true); }, 4000);
+  } catch (err) {
+    if (copia || err.status === 401) return;
+    cuerpo.innerHTML = `<div class="error-bloque"><p>${escapeHtml(err.message)}</p>
+      <button type="button" class="btn-secundario" id="btn-reintentar-saldos"><svg class="ic"><use href="#i-reintentar"/></svg>Reintentar</button></div>`;
+    $('#btn-reintentar-saldos').onclick = () => cargarSaldos(true);
+  }
 }
 
+function pintarSaldos(s) {
+  const cuerpo = $('#saldos-cuerpo');
+  const fechaTc = s.fecha_tc ? deIso(s.fecha_tc) : null;
+  cuerpo.innerHTML = `
+    <div class="total">
+      <p class="total-texto-arriba">Ahorro real</p>
+      <p class="total-monto"><span class="moneda">$</span>${escapeHtml(numTxt(s.ahorro_real_usd))}</p>
+      <p class="total-texto">Todo en dólares ${escapeHtml(usd(s.todo_usd))}, menos el diezmo reservado ${escapeHtml(usd(s.diezmo_usd))}.</p>
+      <div class="cifras">
+        <div><span>En bolivianos</span><strong class="num">${escapeHtml(bs(s.total_bs))}</strong></div>
+        <div><span>En dólares</span><strong class="num">${escapeHtml(usd(s.total_usd))}</strong></div>
+        <div><span>Dólar paralelo</span><strong class="num">${escapeHtml(nf2.format(s.tc))}</strong></div>
+      </div>
+      ${fechaTc ? `<p class="pista">Tipo de cambio del ${escapeHtml(fmtDiaLargo.format(fechaTc))}, de Dólar Blue Bolivia.</p>` : ''}
+    </div>
+    <section class="bloque" aria-labelledby="t-cuentas">
+      <h2 id="t-cuentas" class="bloque-titulo">Cuentas</h2>
+      <ul class="filas">${s.cuentas.map(c => `
+        <li class="fila fila-cuenta">
+          <div class="fila-texto"><div class="fila-titulo">${escapeHtml(c.cuenta)}</div>
+          <div class="fila-meta">${c.diferencia ? `<span class="aviso-dif">La foto del ${escapeHtml(fechaCorta(c.foto.fecha))} difiere en ${escapeHtml(enMoneda(c.diferencia, c.moneda))}</span>`
+            : c.foto ? `Última foto: ${escapeHtml(fechaCorta(c.foto.fecha))}` : 'Sin fotos todavía'}</div></div>
+          <span class="fila-monto num">${escapeHtml(enMoneda(c.saldo, c.moneda))}</span>
+        </li>`).join('')}</ul>
+      <button type="button" class="btn-primario" id="btn-foto">Cargar los saldos de hoy</button>
+      <p class="pista">Revisá cada banco y anotá lo que muestra. Si no coincide con lo calculado, la planilla muestra la diferencia.</p>
+    </section>`;
+  $('#btn-foto').onclick = () => pintarFormFoto(s);
+}
+
+function pintarFormFoto(s) {
+  cargandoFoto = true;
+  const cuerpo = $('#saldos-cuerpo');
+  cuerpo.innerHTML = `
+    <form id="form-foto" class="bloque" novalidate>
+      <h2 class="bloque-titulo">Saldos de hoy</h2>
+      <p class="pista">Viene con lo que calcula la planilla. Cambiá solo lo que sea distinto.</p>
+      ${s.cuentas.map((c, i) => `
+        <div class="foto-fila">
+          <label for="foto-${i}">${escapeHtml(c.cuenta)}</label>
+          <div class="foto-entrada"><span>${c.moneda === 'USD' ? '$' : 'Bs'}</span>
+            <input id="foto-${i}" data-cuenta="${escapeHtml(c.cuenta)}" data-calc="${c.saldo}" class="campo num" inputmode="decimal" value="${escapeHtml(String(c.saldo).replace('.', ','))}"></div>
+          <p class="foto-dif" id="foto-dif-${i}"></p>
+        </div>`).join('')}
+      <button class="btn-primario" type="submit">Guardar saldos</button>
+      <button class="btn-secundario" type="button" id="foto-cancelar">Cancelar</button>
+    </form>`;
+  cuerpo.querySelectorAll('input[data-cuenta]').forEach((inp, i) => inp.addEventListener('input', () => {
+    inp.value = limpiarMonto(inp.value);
+    const dif = leerMonto(inp.value) - Number(inp.dataset.calc);
+    $(`#foto-dif-${i}`).textContent = Math.abs(dif) >= 1 ? `${dif > 0 ? '+' : ''}${numTxt(dif)} contra lo calculado` : '';
+  }));
+  $('#foto-cancelar').onclick = () => { cargandoFoto = false; pintarSaldos(s); };
+  $('#form-foto').addEventListener('submit', async e => {
+    e.preventDefault();
+    const saldos = [...cuerpo.querySelectorAll('input[data-cuenta]')].map(inp => ({ cuenta: inp.dataset.cuenta, monto: leerMonto(inp.value) }));
+    const btn = e.target.querySelector('.btn-primario');
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      await api('/api/saldos', { method: 'POST', body: JSON.stringify({ id: nuevoId(), fecha: aIso(hoyBolivia()), saldos }) });
+      toast('Saldos guardados');
+      cargandoFoto = false;
+      saldosCache = null;
+      pintarSaldos(s);
+      setTimeout(() => { if (!$('#vista-saldos').hidden) cargarSaldos(true); }, 6000);
+    } catch (err) {
+      toast(err.message, 'error');
+      btn.disabled = false; btn.textContent = 'Guardar saldos';
+    }
+  });
+}
+
+// ===== Arranque =====
 function conectarEventos() {
   $('#form-login').addEventListener('submit', async e => {
     e.preventDefault();
@@ -578,24 +809,22 @@ function conectarEventos() {
     try {
       await api('/api/login', { method: 'POST', body: JSON.stringify({ clave }) });
       local.set('qc_entro', true);
-      $('#clave').value = '';
-      $('#login-error').textContent = '';
+      $('#clave').value = ''; $('#login-error').textContent = '';
       entrarApp();
     } catch (err) {
       $('#login-error').textContent = err.message;
-    } finally {
-      btn.disabled = false; btn.textContent = 'Entrar';
-    }
+    } finally { btn.disabled = false; btn.textContent = 'Entrar'; }
   });
 
   $('#lista-autores').addEventListener('click', e => {
     const b = e.target.closest('[data-autor]');
     if (!b) return;
     local.set('qc_autor', b.dataset.autor);
+    estado.cuenta = null;
     entrarApp();
   });
   $('#btn-autor').addEventListener('click', () => {
-    volverA = $('#vista-resumen').hidden ? 'registrar' : 'resumen';
+    volverA = ['registrar', 'resumen', 'saldos'].find(v => !$(`#vista-${v}`).hidden) || 'registrar';
     mostrarAutor();
   });
 
@@ -605,22 +834,32 @@ function conectarEventos() {
     if (limpio !== monto.value) monto.value = limpio;
     actualizarBoton();
   });
-  $('#form-gasto').addEventListener('change', e => {
-    if (e.target.name === 'metodo') local.set('qc_metodo', e.target.value);
-    actualizarBoton();
+  $('#detalle').addEventListener('input', () => { sugerirDesdeDetalle(); pintarLinea(); pintarFrecuentes(); });
+  document.querySelectorAll('input[name="tipo"]').forEach(r => r.addEventListener('change', () => {
+    estado.cuenta = null; pintarTipo(); pintarCuenta();
+  }));
+  document.querySelectorAll('input[name="medio"]').forEach(r => r.addEventListener('change', () => {
+    local.set('qc_medio', medioActual());
+    estado.cuenta = null; pintarCuenta();
+  }));
+  $('#btn-linea').addEventListener('click', elegirLinea);
+  $('#btn-cuenta').addEventListener('click', elegirCuenta);
+  $('#frecuentes').addEventListener('click', e => {
+    const b = e.target.closest('[data-linea]');
+    if (!b) return;
+    estado.linea = b.dataset.linea; estado.lineaManual = true;
+    pintarLinea(); pintarFrecuentes();
   });
-  $('#form-gasto').addEventListener('submit', registrar);
+  $('#form-mov').addEventListener('submit', registrar);
   $('#btn-lista').addEventListener('click', agregarALista);
 
   $('#btn-fecha').addEventListener('click', () => {
     const input = $('#fecha');
-    if (fechaElegida) {
-      fechaElegida = null;
-      input.hidden = true;
-    } else {
+    if (estado.fecha) { estado.fecha = null; input.hidden = true; }
+    else {
       input.hidden = false;
-      input.max = aInput(hoyBolivia());
-      input.value = aInput(hoyBolivia());
+      input.max = aIso(hoyBolivia());
+      input.value = aIso(hoyBolivia());
       input.focus();
       try { input.showPicker(); } catch { /* no todos los navegadores */ }
     }
@@ -628,21 +867,34 @@ function conectarEventos() {
   });
   $('#fecha').addEventListener('change', e => {
     if (!e.target.value) return;
-    const d = deInput(e.target.value);
-    fechaElegida = mismoDia(d, hoyBolivia()) ? null : d;
-    if (!fechaElegida) e.target.hidden = true;
+    const d = deIso(e.target.value);
+    estado.fecha = mismoDia(d, hoyBolivia()) ? null : d;
+    if (!estado.fecha) e.target.hidden = true;
     pintarFecha();
   });
 
   $('#pendientes-lista').addEventListener('click', e => {
-    const quitar = e.target.closest('[data-quitar]');
-    if (quitar) { quitarPendiente(quitar.dataset.quitar); return; }
-    const reenviar = e.target.closest('[data-reenviar]');
-    if (reenviar) enviarLista(false, reenviar.dataset.reenviar);
+    const q = e.target.closest('[data-quitar]');
+    if (q) quitarPendiente(q.dataset.quitar);
   });
   $('#btn-enviar-lista').addEventListener('click', () => {
     if (!navigator.onLine) { toast('Sin señal. Se envían solos cuando vuelva.', 'offline'); return; }
     enviarLista(false);
+  });
+
+  // Selector
+  $('#selector-lista').addEventListener('click', e => {
+    const b = e.target.closest('[data-valor]');
+    if (!b) return;
+    cerrarSelector();
+    if (alElegir) alElegir(b.dataset.valor);
+  });
+  $('#selector-cerrar').addEventListener('click', cerrarSelector);
+  $('#selector').addEventListener('click', e => { if (e.target.id === 'selector') cerrarSelector(); });
+  $('#selector-buscar').addEventListener('input', e => {
+    const q = normalizar(e.target.value);
+    document.querySelectorAll('#selector-lista .hoja-item').forEach(it => { it.hidden = !!q && !it.dataset.buscar.includes(q); });
+    document.querySelectorAll('#selector-lista [data-grupo]').forEach(g => { g.hidden = ![...g.querySelectorAll('.hoja-item')].some(i => !i.hidden); });
   });
 
   document.querySelectorAll('.tab').forEach(t => t.addEventListener('click', () => cambiarVista(t.dataset.vista)));
@@ -650,44 +902,36 @@ function conectarEventos() {
   $('#mes-sig').addEventListener('click', () => moverMes(1));
   $('#btn-salir').addEventListener('click', async () => {
     try { await api('/api/logout', { method: 'POST' }); } catch { /* igual se sale */ }
-    resumenCache.clear();
+    resumenCache.clear(); saldosCache = null;
     mostrarLogin();
   });
 
   window.addEventListener('online', () => { pintarConexion(); enviarAutomaticos(); });
   window.addEventListener('offline', pintarConexion);
-  // Al volver a la app (p. ej. al día siguiente) la fecha pasa a la de hoy
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
-    if (!fechaElegida) pintarFecha();
+    if (!estado.fecha) pintarFecha();
     enviarAutomaticos();
   });
 }
 
 async function iniciar() {
-  armarCategorias();
   conectarEventos();
-  const metodo = local.get('qc_metodo', null);
-  if (metodo) {
-    const r = document.querySelector(`input[name="metodo"][value="${metodo}"]`);
-    if (r) r.checked = true;
-  }
-  pintarFecha();
-  pintarPendientes();
-  pintarAnotando();
-  pintarConexion();
-  actualizarBoton();
+  const medio = local.get('qc_medio', 'Banco');
+  const r = document.querySelector(`input[name="medio"][value="${medio}"]`);
+  if (r) r.checked = true;
+  pintarFecha(); pintarTipo(); pintarCuenta();
+  pintarPendientes(); pintarAnotando(); pintarConexion();
 
   if ('serviceWorker' in navigator && (location.protocol === 'https:' || location.hostname === 'localhost')) {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* la app anda igual sin él */ });
   }
-
   try {
     const s = await api('/api/sesion');
     if (s.ok) { local.set('qc_entro', true); entrarApp(); } else mostrarLogin();
   } catch (err) {
-    // Sin red: si este celular ya había entrado, se puede seguir registrando offline
-    if (err.sinRed && local.get('qc_entro', false)) entrarApp(); else mostrarLogin(err.sinRed ? 'Sin conexión. Conectate para entrar la primera vez.' : '');
+    if (err.sinRed && local.get('qc_entro', false)) entrarApp();
+    else mostrarLogin(err.sinRed ? 'Sin conexión. Conectate para entrar la primera vez.' : '');
   }
 }
 

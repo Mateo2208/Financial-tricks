@@ -13,21 +13,19 @@
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png" type="image/png">
   <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
-  <link rel="stylesheet" href="/app.css?v=2">
+  <link rel="stylesheet" href="/app.css?v=3">
 </head>
 <body>
   <!-- Íconos (Lucide, ISC) -->
   <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
-    <symbol id="i-comida" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
-    <symbol id="i-movilidad" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
-    <symbol id="i-varios" viewBox="0 0 24 24"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></symbol>
-    <symbol id="i-servicios" viewBox="0 0 24 24"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></symbol>
-    <symbol id="i-tarjeta" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/><path d="M6 14h2"/></symbol>
-    <symbol id="i-efectivo" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
     <symbol id="i-registrar" viewBox="0 0 24 24"><path d="M13 21h8"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
     <symbol id="i-resumen" viewBox="0 0 24 24"><path d="M5 21v-6"/><path d="M12 21V3"/><path d="M19 21V9"/></symbol>
+    <symbol id="i-saldos" viewBox="0 0 24 24"><path d="M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1"/><path d="M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4"/></symbol>
+    <symbol id="i-tarjeta" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/><path d="M6 14h2"/></symbol>
+    <symbol id="i-efectivo" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
     <symbol id="i-izq" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
     <symbol id="i-der" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-abajo" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
     <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
     <symbol id="i-fecha" viewBox="0 0 24 24"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></symbol>
@@ -35,6 +33,8 @@
     <symbol id="i-salir" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
     <symbol id="i-lista" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></symbol>
     <symbol id="i-reintentar" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+    <symbol id="i-buscar" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+    <symbol id="i-magia" viewBox="0 0 24 24"><path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z"/></symbol>
   </svg>
 
   <!-- Entrada -->
@@ -76,39 +76,44 @@
     <main class="contenido">
       <!-- Registrar -->
       <section id="vista-registrar" class="vista" aria-labelledby="t-registrar">
-        <h1 id="t-registrar" class="sr-only">Registrar un gasto</h1>
-        <form id="form-gasto" novalidate>
+        <h1 id="t-registrar" class="sr-only">Registrar</h1>
+        <form id="form-mov" novalidate>
+          <div class="segmentado tipo" role="radiogroup" aria-label="Tipo de movimiento">
+            <label class="segmento"><input type="radio" name="tipo" value="Gasto" checked><span>Gasto</span></label>
+            <label class="segmento"><input type="radio" name="tipo" value="Ingreso"><span>Ingreso</span></label>
+          </div>
+
           <div class="monto">
             <label for="monto" class="monto-label">Monto</label>
             <div class="monto-fila">
               <span class="monto-moneda" aria-hidden="true">Bs</span>
-              <input id="monto" class="monto-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="monto-error">
+              <input id="monto" class="monto-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0">
             </div>
-            <p id="monto-error" class="error-campo" role="alert"></p>
           </div>
 
-          <fieldset class="grupo">
-            <legend class="grupo-titulo">Categoría</legend>
-            <div class="categorias" id="categorias"></div>
-          </fieldset>
-
-          <fieldset class="grupo">
-            <legend class="grupo-titulo">Pagado con</legend>
-            <div class="segmentado">
-              <label class="segmento">
-                <input type="radio" name="metodo" value="tarjeta">
-                <span><svg class="ic"><use href="#i-tarjeta"/></svg>Tarjeta</span>
-              </label>
-              <label class="segmento">
-                <input type="radio" name="metodo" value="efectivo">
-                <span><svg class="ic"><use href="#i-efectivo"/></svg>Efectivo</span>
-              </label>
-            </div>
-          </fieldset>
+          <div class="grupo">
+            <label class="grupo-titulo" for="detalle" id="detalle-label">¿En qué?</label>
+            <input id="detalle" class="campo" type="text" maxlength="120" autocomplete="off" placeholder="Ej.: hipermaxi, pan, gasolina kicks">
+          </div>
 
           <div class="grupo">
-            <label class="grupo-titulo" for="glosa">Detalle <span class="suave">(opcional)</span></label>
-            <input id="glosa" class="campo" type="text" maxlength="120" autocomplete="off" placeholder="Ej.: almuerzo, gasolina, luz">
+            <span class="grupo-titulo" id="linea-label">Línea del presupuesto</span>
+            <button id="btn-linea" type="button" class="selector-fila" aria-describedby="linea-pista">
+              <span class="punto" id="linea-punto"></span>
+              <span class="selector-texto"><span id="linea-nombre">Elegí la línea</span><span id="linea-cat" class="suave"></span></span>
+              <svg class="ic suave"><use href="#i-abajo"/></svg>
+            </button>
+            <p id="linea-pista" class="pista"></p>
+            <div id="frecuentes" class="chips"></div>
+          </div>
+
+          <div class="grupo">
+            <span class="grupo-titulo" id="medio-label">Pagado con</span>
+            <div class="segmentado" role="radiogroup" aria-labelledby="medio-label">
+              <label class="segmento"><input type="radio" name="medio" value="Banco"><span><svg class="ic"><use href="#i-tarjeta"/></svg>Banco o QR</span></label>
+              <label class="segmento"><input type="radio" name="medio" value="Efectivo"><span><svg class="ic"><use href="#i-efectivo"/></svg>Efectivo</span></label>
+            </div>
+            <button id="btn-cuenta" type="button" class="cuenta-chip"><span id="cuenta-nombre">Cuenta</span><svg class="ic"><use href="#i-abajo"/></svg></button>
           </div>
 
           <div class="grupo fecha">
@@ -144,6 +149,12 @@
           <button id="mes-sig" class="btn-icono" type="button" aria-label="Mes siguiente"><svg class="ic"><use href="#i-der"/></svg></button>
         </div>
         <div id="resumen-cuerpo" aria-live="polite"></div>
+      </section>
+
+      <!-- Saldos -->
+      <section id="vista-saldos" class="vista" aria-labelledby="t-saldos" hidden>
+        <h1 id="t-saldos" class="sr-only">Saldos</h1>
+        <div id="saldos-cuerpo" aria-live="polite"></div>
         <button id="btn-salir" class="btn-texto salir" type="button">
           <svg class="ic"><use href="#i-salir"/></svg>Cerrar sesión en este celular
         </button>
@@ -151,17 +162,24 @@
     </main>
 
     <nav class="tabs" aria-label="Secciones">
-      <button class="tab" type="button" data-vista="registrar" aria-current="page">
-        <svg class="ic"><use href="#i-registrar"/></svg><span>Registrar</span>
-      </button>
-      <button class="tab" type="button" data-vista="resumen">
-        <svg class="ic"><use href="#i-resumen"/></svg><span>Resumen</span>
-      </button>
+      <button class="tab" type="button" data-vista="registrar" aria-current="page"><svg class="ic"><use href="#i-registrar"/></svg><span>Registrar</span></button>
+      <button class="tab" type="button" data-vista="resumen"><svg class="ic"><use href="#i-resumen"/></svg><span>Resumen</span></button>
+      <button class="tab" type="button" data-vista="saldos"><svg class="ic"><use href="#i-saldos"/></svg><span>Saldos</span></button>
     </nav>
   </div>
 
+  <!-- Selector (línea o cuenta) -->
+  <dialog id="selector" class="hoja" aria-labelledby="selector-titulo">
+    <div class="hoja-cabeza">
+      <h2 id="selector-titulo" class="seccion-titulo"></h2>
+      <button type="button" class="btn-icono" id="selector-cerrar" aria-label="Cerrar"><svg class="ic"><use href="#i-x"/></svg></button>
+    </div>
+    <label class="buscar"><svg class="ic suave"><use href="#i-buscar"/></svg><input id="selector-buscar" type="search" placeholder="Buscar" autocomplete="off"></label>
+    <div id="selector-lista" class="hoja-lista"></div>
+  </dialog>
+
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
 
-  <script src="/app.js?v=2" defer></script>
+  <script src="/app.js?v=3" defer></script>
 </body>
 </html>

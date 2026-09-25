@@ -24,6 +24,7 @@ MAX_INTENTOS = 12
 ENVIANDO_COLGADO = 180  # s: un 'enviando' más viejo que esto quedó de un proceso que murió
 
 _despertar = threading.Event()
+_tarea = None
 
 
 def conn():
@@ -96,6 +97,20 @@ def del_mes_sin_confirmar(mes, desde_ts):
     return [{**dict(r), 'payload': json.loads(r['payload'])} for r in rows]
 
 
+def sin_reflejar(desde_ts):
+    """Payloads de movimientos aceptados que la última lectura de la planilla puede no tener."""
+    with conn() as c:
+        rows = c.execute('''SELECT id, payload FROM registros
+                            WHERE estado IN ('pendiente', 'enviando') OR (estado = 'hecho' AND actualizado > ?)''',
+                         (desde_ts,)).fetchall()
+    out = []
+    for r in rows:
+        p = json.loads(r['payload'])
+        if p.get('op') == 'movimiento':
+            out.append({**p, 'id': r['id']})
+    return out
+
+
 def pendientes_totales():
     with conn() as c:
         return c.execute("SELECT COUNT(*) FROM registros WHERE estado IN ('pendiente', 'enviando')").fetchone()[0]
@@ -139,13 +154,14 @@ def _procesar_uno(enviar, SheetError, log):
             return False
         c.execute("UPDATE registros SET estado = 'enviando', actualizado = ? WHERE id = ?", (ahora, r['id']))
 
-    payload = {**json.loads(r['payload']), 'id_registro': r['id']}
+    payload = {**json.loads(r['payload']), 'id': r['id']}
     try:
-        res = enviar(payload, f"cola {r['id'][:8]}")
+        res = enviar(payload, f"cola {r['id'][:10]}")
         with conn() as c:
             c.execute('''UPDATE registros SET estado = 'hecho', fila = ?, error = NULL, actualizado = ?
-                         WHERE id = ?''', (res.get('row'), time.time(), r['id']))
-        cache_vencer(r['mes'])
+                         WHERE id = ?''', (res.get('fila'), time.time(), r['id']))
+        if _al_confirmar:
+            _al_confirmar(payload)
     except SheetError as e:
         intentos = r['intentos'] + 1
         # 422 = la planilla lo rechazó (fecha inexistente, sin permiso): reintentar no sirve
@@ -169,7 +185,14 @@ def _bucle(enviar, SheetError, log):
         except BlockingIOError:
             time.sleep(20)  # otro proceso es el enviador; tomar la posta si muere
     log('cola: este proceso es el enviador')
+    ultima_tarea = 0
     while True:
+        if _tarea and time.time() - ultima_tarea > 600:
+            ultima_tarea = time.time()
+            try:
+                _tarea()
+            except Exception as e:
+                log(f"cola: tarea periódica falló {e!r}")
         try:
             trabajo = _procesar_uno(enviar, SheetError, log)
         except Exception as e:  # nunca matar el hilo
@@ -181,6 +204,13 @@ def _bucle(enviar, SheetError, log):
             _despertar.clear()
 
 
-def arrancar_enviador(enviar, SheetError, log):
+_al_confirmar = None
+
+
+def arrancar_enviador(enviar, SheetError, log, al_confirmar=None, tarea_periodica=None):
+    """tarea_periodica: se llama cada ~10 min en el proceso enviador (p. ej. el TC del día)."""
+    global _al_confirmar, _tarea
+    _al_confirmar = al_confirmar
+    _tarea = tarea_periodica
     iniciar_db()
     threading.Thread(target=_bucle, args=(enviar, SheetError, log), daemon=True, name='cola').start()
