@@ -1,1 +1,3 @@
-.deployment-id
+.deployment-id.*
+.secreto.*
+Secreto.js

@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#121212" media="(prefers-color-scheme: dark)">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="QuickCash">
+  <title>QuickCash</title>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+  <link rel="stylesheet" href="/app.css?v=1">
+</head>
+<body>
+  <!-- Íconos (Lucide, ISC) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none">
+    <symbol id="i-comida" viewBox="0 0 24 24"><path d="M3 2v7c0 1.1.9 2 2 2h4a2 2 0 0 0 2-2V2"/><path d="M7 2v20"/><path d="M21 15V2a5 5 0 0 0-5 5v6c0 1.1.9 2 2 2h3Zm0 0v7"/></symbol>
+    <symbol id="i-movilidad" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+    <symbol id="i-varios" viewBox="0 0 24 24"><path d="M16 10a4 4 0 0 1-8 0"/><path d="M3.103 6.034h17.794"/><path d="M3.4 5.467a2 2 0 0 0-.4 1.2V20a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6.667a2 2 0 0 0-.4-1.2l-2-2.667A2 2 0 0 0 17 2H7a2 2 0 0 0-1.6.8z"/></symbol>
+    <symbol id="i-servicios" viewBox="0 0 24 24"><path d="M15.914 4a1.5 1.5 0 00-2.474-1.561l-9 9A1.5 1.5 0 005.5 14h4.002a.5.5 0 01.471.666L8.086 20a1.5 1.5 0 002.475 1.56l9-9A1.5 1.5 0 0018.5 10h-3.997a.5.5 0 01-.472-.667z"/></symbol>
+    <symbol id="i-tarjeta" viewBox="0 0 24 24"><rect width="20" height="14" x="2" y="5" rx="2"/><line x1="2" x2="22" y1="10" y2="10"/><path d="M6 14h2"/></symbol>
+    <symbol id="i-efectivo" viewBox="0 0 24 24"><rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/></symbol>
+    <symbol id="i-registrar" viewBox="0 0 24 24"><path d="M13 21h8"/><path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/></symbol>
+    <symbol id="i-resumen" viewBox="0 0 24 24"><path d="M5 21v-6"/><path d="M12 21V3"/><path d="M19 21V9"/></symbol>
+    <symbol id="i-izq" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></symbol>
+    <symbol id="i-der" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+    <symbol id="i-fecha" viewBox="0 0 24 24"><path d="M8 2v3"/><path d="M16 2v3"/><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/></symbol>
+    <symbol id="i-offline" viewBox="0 0 24 24"><path d="M12 20h.01"/><path d="M8.5 16.429a5 5 0 0 1 7 0"/><path d="M5 12.859a10 10 0 0 1 5.17-2.69"/><path d="M19 12.859a10 10 0 0 0-2.007-1.523"/><path d="M2 8.82a15 15 0 0 1 4.177-2.643"/><path d="M22 8.82a15 15 0 0 0-11.288-3.764"/><path d="m2 2 20 20"/></symbol>
+    <symbol id="i-salir" viewBox="0 0 24 24"><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/></symbol>
+    <symbol id="i-lista" viewBox="0 0 24 24"><path d="M16 5H3"/><path d="M11 12H3"/><path d="M16 19H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></symbol>
+    <symbol id="i-reintentar" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></symbol>
+  </svg>
+
+  <!-- Entrada -->
+  <section id="vista-login" class="pantalla-entrada" hidden>
+    <form id="form-login" class="entrada" novalidate>
+      <p class="marca-grande" aria-hidden="true">Bs</p>
+      <h1 class="entrada-titulo">QuickCash</h1>
+      <p class="entrada-texto">Los gastos de la casa, directo a la planilla.</p>
+      <label class="campo-label" for="clave">Clave de la casa</label>
+      <input id="clave" class="campo" type="password" autocomplete="current-password" required>
+      <p id="login-error" class="error-campo" role="alert"></p>
+      <button class="btn-primario" type="submit">Entrar</button>
+    </form>
+  </section>
+
+  <section id="vista-autor" class="pantalla-entrada" hidden>
+    <div class="entrada">
+      <h1 class="entrada-titulo">¿Quién registra en este celular?</h1>
+      <p class="entrada-texto">Queda guardado. Lo podés cambiar arriba a la derecha.</p>
+      <div class="autores" id="lista-autores"></div>
+    </div>
+  </section>
+
+  <!-- App -->
+  <div id="app" class="app" hidden>
+    <header class="barra">
+      <span class="barra-marca">QuickCash</span>
+      <button id="btn-autor" class="chip-autor" type="button" aria-label="Cambiar quién registra">
+        <span class="chip-inicial" id="autor-inicial"></span>
+        <span id="autor-nombre"></span>
+      </button>
+    </header>
+
+    <div id="aviso-offline" class="aviso" hidden>
+      <svg class="ic"><use href="#i-offline"/></svg>
+      <span>Sin conexión. Lo que registres queda guardado acá y se envía solo cuando vuelva la señal.</span>
+    </div>
+
+    <main class="contenido">
+      <!-- Registrar -->
+      <section id="vista-registrar" class="vista" aria-labelledby="t-registrar">
+        <h1 id="t-registrar" class="sr-only">Registrar un gasto</h1>
+        <form id="form-gasto" novalidate>
+          <div class="monto">
+            <label for="monto" class="monto-label">Monto</label>
+            <div class="monto-fila">
+              <span class="monto-moneda" aria-hidden="true">Bs</span>
+              <input id="monto" class="monto-input" type="text" inputmode="decimal" autocomplete="off" placeholder="0" aria-describedby="monto-error">
+            </div>
+            <p id="monto-error" class="error-campo" role="alert"></p>
+          </div>
+
+          <fieldset class="grupo">
+            <legend class="grupo-titulo">Categoría</legend>
+            <div class="categorias" id="categorias"></div>
+          </fieldset>
+
+          <fieldset class="grupo">
+            <legend class="grupo-titulo">Pagado con</legend>
+            <div class="segmentado">
+              <label class="segmento">
+                <input type="radio" name="metodo" value="tarjeta">
+                <span><svg class="ic"><use href="#i-tarjeta"/></svg>Tarjeta</span>
+              </label>
+              <label class="segmento">
+                <input type="radio" name="metodo" value="efectivo">
+                <span><svg class="ic"><use href="#i-efectivo"/></svg>Efectivo</span>
+              </label>
+            </div>
+          </fieldset>
+
+          <div class="grupo">
+            <label class="grupo-titulo" for="glosa">Detalle <span class="suave">(opcional)</span></label>
+            <input id="glosa" class="campo" type="text" maxlength="120" autocomplete="off" placeholder="Ej.: almuerzo, gasolina, luz">
+          </div>
+
+          <div class="grupo fecha">
+            <svg class="ic suave"><use href="#i-fecha"/></svg>
+            <span id="fecha-texto" class="fecha-texto"></span>
+            <button id="btn-fecha" type="button" class="btn-texto">Cambiar</button>
+            <input id="fecha" type="date" class="campo fecha-input" hidden>
+          </div>
+
+          <button id="btn-registrar" class="btn-primario" type="submit" disabled>Ingresá el monto</button>
+          <button id="btn-lista" class="btn-secundario" type="button">
+            <svg class="ic"><use href="#i-lista"/></svg>Agregar a la lista y cargar otro
+          </button>
+        </form>
+
+        <section id="pendientes" class="pendientes" hidden aria-labelledby="t-pendientes">
+          <div class="pendientes-cabeza">
+            <h2 id="t-pendientes" class="seccion-titulo">Por registrar</h2>
+            <span id="pendientes-total" class="num suave"></span>
+          </div>
+          <ul id="pendientes-lista" class="filas"></ul>
+          <button id="btn-enviar-lista" class="btn-primario" type="button"></button>
+        </section>
+      </section>
+
+      <!-- Resumen -->
+      <section id="vista-resumen" class="vista" aria-labelledby="t-resumen" hidden>
+        <div class="mes-nav">
+          <button id="mes-ant" class="btn-icono" type="button" aria-label="Mes anterior"><svg class="ic"><use href="#i-izq"/></svg></button>
+          <h1 id="t-resumen" class="mes-titulo"></h1>
+          <button id="mes-sig" class="btn-icono" type="button" aria-label="Mes siguiente"><svg class="ic"><use href="#i-der"/></svg></button>
+        </div>
+        <div id="resumen-cuerpo" aria-live="polite"></div>
+        <button id="btn-salir" class="btn-texto salir" type="button">
+          <svg class="ic"><use href="#i-salir"/></svg>Cerrar sesión en este celular
+        </button>
+      </section>
+    </main>
+
+    <nav class="tabs" aria-label="Secciones">
+      <button class="tab" type="button" data-vista="registrar" aria-current="page">
+        <svg class="ic"><use href="#i-registrar"/></svg><span>Registrar</span>
+      </button>
+      <button class="tab" type="button" data-vista="resumen">
+        <svg class="ic"><use href="#i-resumen"/></svg><span>Resumen</span>
+      </button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/app.js?v=1" defer></script>
+</body>
+</html>
