@@ -634,8 +634,8 @@ function pintarResumen(r, esActual) {
         : '<p class="total-texto">Sin presupuesto cargado para este mes.</p>'}
       ${r.proyeccion ? `<div class="proyeccion">
         <span class="proyeccion-titulo">Proyección a fin de mes</span>
-        <strong class="num">${escapeHtml(bs(r.proyeccion.total))}</strong>
-        <span class="proyeccion-texto">Lo gastado hasta hoy más lo que se suele gastar del ${r.proyeccion.desde_dia} a fin de mes (${escapeHtml(bs(r.proyeccion.resto))}, promedio de ${r.proyeccion.meses.map(m => fmtMesSolo.format(new Date(2026, m - 1, 1))).join(', ')}).${pres ? ` Quedaría en ${Math.round(r.proyeccion.total / pres * 100)}% del presupuesto.` : ''}</span>
+        <strong class="num">${escapeHtml(bs(Math.round(r.proyeccion.total)))}</strong>
+        <span class="proyeccion-texto">Lo gastado hasta hoy más lo que se suele gastar del ${r.proyeccion.desde_dia} a fin de mes (${escapeHtml(bs(Math.round(r.proyeccion.resto)))}, promedio de ${r.proyeccion.meses.map(m => fmtMesSolo.format(new Date(2026, m - 1, 1))).join(', ')}).${pres ? ` Quedaría en ${Math.round(r.proyeccion.total / pres * 100)}% del presupuesto.` : ''}</span>
       </div>` : ''}
       <div class="cifras">
         <div><span>Ingresos</span><strong class="num ingreso">${escapeHtml(bs(r.ingresos))}</strong></div>

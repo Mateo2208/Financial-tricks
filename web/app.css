@@ -666,3 +666,13 @@ body { font-feature-settings: "tnum" 1, "cv11" 1; letter-spacing: -.005em; }
   .total { background: linear-gradient(160deg, #1f2a44, #141b2b); }
   .toast { background: #243049; }
 }
+
+/* Sello del login = el ícono de la app */
+.marca-grande span {
+  position: relative; display: inline-grid; place-items: center; width: 84px; height: 84px; border-radius: 20px;
+  background: linear-gradient(160deg, var(--marino-2), var(--marino)); color: #fff; font: 800 38px/1 var(--sans); letter-spacing: -2px;
+}
+.marca-grande span::after { content: ""; position: absolute; right: 16px; bottom: 22px; width: 8px; height: 8px; border-radius: 2px; background: var(--dorado); }
+.total .cifras strong { font-size: 15px; }
+.total .cifras div { padding: 9px 10px; }
+@media (prefers-color-scheme: dark) { .marca-grande span { background: linear-gradient(160deg, #2e3b5b, #1f2a44); } }
