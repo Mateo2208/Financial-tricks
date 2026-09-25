@@ -593,11 +593,10 @@ async function cargarResumen(forzar = false) {
   }
 }
 
-function barra(real, pres, color) {
-  if (!pres) return `<span class="pista-barra sin-pres" aria-hidden="true"><i style="width:100%;background:${color}"></i></span>`;
+function barra(real, pres) {
+  if (!pres) return `<span class="pista-barra sin-pres" aria-hidden="true"><i style="width:100%"></i></span>`;
   const pct = Math.min(real / pres, 1) * 100;
-  const pasado = real > pres;
-  return `<span class="pista-barra${pasado ? ' pasado' : ''}" aria-hidden="true"><i style="width:${pct}%;background:${pasado ? 'var(--err)' : color}"></i></span>`;
+  return `<span class="pista-barra${real > pres ? ' pasado' : ''}" aria-hidden="true"><i style="width:${pct}%"></i></span>`;
 }
 
 function textoUso(real, pres) {
@@ -627,9 +626,14 @@ function pintarResumen(r, esActual) {
     <div class="total">
       <p class="total-texto-arriba">Gastado en ${escapeHtml(nombreMes)}</p>
       <p class="total-monto"><span class="moneda">Bs</span>${escapeHtml(numTxt(r.gastado))}</p>
-      ${pres ? `<div class="total-barra">${barra(r.gastado, pres, 'var(--tinta)')}</div>
+      ${pres ? `<div class="total-barra">${barra(r.gastado, pres)}</div>
         <p class="total-texto">${Math.round(pctTotal * 100)}% de ${escapeHtml(bs(pres))} presupuestados. <strong>${escapeHtml(textoUso(r.gastado, pres))}</strong></p>`
         : '<p class="total-texto">Sin presupuesto cargado para este mes.</p>'}
+      ${r.proyeccion ? `<div class="proyeccion">
+        <span class="proyeccion-titulo">Proyección a fin de mes</span>
+        <strong class="num">${escapeHtml(bs(r.proyeccion.total))}</strong>
+        <span class="proyeccion-texto">Lo gastado hasta hoy más lo que se suele gastar del ${r.proyeccion.desde_dia} a fin de mes (${escapeHtml(bs(r.proyeccion.resto))}, promedio de ${r.proyeccion.meses.map(m => fmtMesSolo.format(new Date(2026, m - 1, 1))).join(', ')}).${pres ? ` Quedaría en ${Math.round(r.proyeccion.total / pres * 100)}% del presupuesto.` : ''}</span>
+      </div>` : ''}
       <div class="cifras">
         <div><span>Ingresos</span><strong class="num ingreso">${escapeHtml(bs(r.ingresos))}</strong></div>
         <div><span>Resultado</span><strong class="num ${r.resultado < 0 ? 'negativo' : 'ingreso'}">${escapeHtml(bs(r.resultado))}</strong></div>
@@ -648,7 +652,7 @@ function pintarResumen(r, esActual) {
             <button type="button" class="cat-cabeza" data-cat="${escapeHtml(c.categoria)}" aria-expanded="${abierta}">
               <span class="cat-nombre"><span class="punto"></span>${escapeHtml(bonito(c.categoria))}</span>
               <span class="cat-monto num">${escapeHtml(bs(c.real))}</span>
-              ${barra(c.real, c.presupuesto, color)}
+              ${barra(c.real, c.presupuesto)}
               <span class="cat-uso">${escapeHtml(c.presupuesto ? `de ${bs(c.presupuesto)}. ${textoUso(c.real, c.presupuesto)}` : 'Sin presupuesto')}</span>
               <svg class="ic cat-flecha"><use href="#i-abajo"/></svg>
             </button>
@@ -656,7 +660,7 @@ function pintarResumen(r, esActual) {
               ${c.lineas.map(l => `<li class="linea-fila">
                 <span class="linea-nombre">${escapeHtml(bonito(l.linea))}${l.anual ? ' <span class="etiqueta">anual</span>' : ''}</span>
                 <span class="num">${escapeHtml(bs(l.real))}</span>
-                ${barra(l.real, l.presupuesto, color)}
+                ${barra(l.real, l.presupuesto)}
                 <span class="cat-uso">${escapeHtml(l.presupuesto ? `de ${bs(l.presupuesto)}. ${textoUso(l.real, l.presupuesto)}` : 'Sin presupuesto')}</span>
               </li>`).join('')}
             </ul>
@@ -747,7 +751,20 @@ function pintarSaldos(s) {
         <div><span>Dólar paralelo</span><strong class="num">${escapeHtml(nf2.format(s.tc_paralelo))}</strong></div>
       </div>
       <p class="pista">Las cuentas de banco se pasan a dólares con el dólar del banco; el efectivo, con el paralelo.</p>
+      ${graficoAhorro(s.historia)}
     </div>
+    ${s.conciliacion ? `<section class="bloque" aria-labelledby="t-cuadra">
+      <h2 id="t-cuadra" class="bloque-titulo">¿Cuadran los saldos?</h2>
+      <p class="pista">Entre las revisiones del ${escapeHtml(fechaCorta(s.conciliacion.desde))} y el ${escapeHtml(fechaCorta(s.conciliacion.hasta))}, en bolivianos.</p>
+      <ul class="lista-simple cuadra">
+        <li><span>Cambió la plata</span><strong class="num">${escapeHtml(bs(s.conciliacion.cambio))}</strong></li>
+        <li><span>Ingresos anotados</span><strong class="num">${escapeHtml(bs(s.conciliacion.ingresos))}</strong></li>
+        <li><span>Gastos anotados</span><strong class="num">${escapeHtml(bs(-s.conciliacion.gastos))}</strong></li>
+        <li class="cuadra-total${Math.abs(s.conciliacion.sin_anotar) >= 1 ? ' descuadre' : ''}"><span>Sin anotar</span><strong class="num">${escapeHtml(bs(s.conciliacion.sin_anotar))}</strong></li>
+      </ul>
+      <p class="pista">${Math.abs(s.conciliacion.sin_anotar) < 1 ? 'Todo lo que se movió está anotado.'
+        : s.conciliacion.sin_anotar < 0 ? 'Salió plata que no se anotó: gastos, transferencias o comisiones.' : 'Entró plata que no se anotó.'}</p>
+    </section>` : ''}
     <section class="bloque" aria-labelledby="t-cuentas">
       <h2 id="t-cuentas" class="bloque-titulo">Cuentas</h2>
       <ul class="filas">${s.cuentas.map(c => `
@@ -761,6 +778,19 @@ function pintarSaldos(s) {
       <p class="pista">Anotá lo que muestra cada cuenta: se agrega una columna nueva en la hoja SALDOS.</p>
     </section>`;
   $('#btn-foto').onclick = () => pintarFormFoto(s);
+}
+
+// Evolución del ahorro real en cada revisión (línea simple, sin librerías)
+function graficoAhorro(h) {
+  if (!h || h.length < 2) return '';
+  const w = 320, alto = 64, v = h.map(x => x.ahorro);
+  const min = Math.min(...v), max = Math.max(...v), rango = max - min || 1;
+  const pts = v.map((y, i) => `${(i / (v.length - 1) * w).toFixed(1)},${(alto - 4 - (y - min) / rango * (alto - 8)).toFixed(1)}`).join(' ');
+  return `<figure class="evolucion">
+    <svg viewBox="0 0 ${w} ${alto}" preserveAspectRatio="none" role="img" aria-label="Ahorro real de ${escapeHtml(usd(v[0]))} a ${escapeHtml(usd(v[v.length - 1]))}">
+      <polyline points="${pts}" fill="none" stroke="currentColor" stroke-width="2" vector-effect="non-scaling-stroke"/></svg>
+    <figcaption><span>${escapeHtml(fechaCorta(h[0].fecha))}</span><span>Ahorro real en cada revisión</span><span>${escapeHtml(fechaCorta(h[h.length - 1].fecha))}</span></figcaption>
+  </figure>`;
 }
 
 function pintarFormFoto(s) {

@@ -6,7 +6,8 @@ está en la cola y todavía no llegó a la hoja.
 import re
 import unicodedata
 from collections import defaultdict
-from datetime import datetime, timedelta, timezone
+from calendar import monthrange
+from datetime import date, datetime, timedelta, timezone
 
 BOLIVIA = timezone(timedelta(hours=-4))
 COLS = ['COMIDA', 'TRANSPORTE', 'COMPRAS VARIOS', 'SERVICIOS BÁSICOS']  # D:K de a pares (tarjeta, efectivo)
@@ -134,6 +135,7 @@ def resumen(d, mes, en_cola=()):
     movs.sort(key=lambda m: (m['fecha'], m['id']), reverse=True)
     return {
         'status': 'success', 'mes': mes, 'gastado': round(gasto_total, 2), 'ingresos': round(ingreso_total, 2),
+        'proyeccion': proyeccion(d, mes, gasto_total, en_cola),
         'resultado': round(ingreso_total - gasto_total, 2), 'hoy': round(gasto_hoy, 2),
         'presupuesto_mensual': round(pres_mensual, 2), 'presupuesto_anual': round(pres_anual, 2),
         'categorias': categorias,
@@ -141,6 +143,45 @@ def resumen(d, mes, en_cola=()):
         'por_persona': {k: round(v, 2) for k, v in sorted(por_persona.items(), key=lambda x: -x[1])},
         'movimientos': movs, 'anotando': sum(1 for m in movs if m['anotando']),
     }
+
+
+def proyeccion(d, mes, gastado, en_cola=()):
+    """Mes en curso: gastado hasta hoy + lo que en promedio se gastó desde mañana a fin de mes en los 3 meses
+    anteriores de la gestión (solo líneas mensuales: un pago anual no infla la proyección). Igual que RESUMEN."""
+    hoy_d = hoy()
+    anio, nmes = int(mes[:4]), int(mes[5:7])
+    if (anio, nmes) != (hoy_d.year, hoy_d.month):
+        return None
+    mensuales = {l['linea'] for l in catalogo(d)['lineas'] if l['tipo'] == 'Gasto' and l['tabla'] == 'Mensual'}
+    gastos = [m for m in movimientos(d, en_cola) if m['tipo'] == 'Gasto' and m['linea'] in mensuales]
+    restos, meses = [], []
+    for k in (1, 2, 3):
+        mm = nmes - k
+        if mm < 1:
+            break
+        ult = monthrange(anio, mm)[1]
+        desde = date(anio, mm, min(hoy_d.day, ult)).isoformat()
+        hasta = date(anio, mm, ult).isoformat()
+        restos.append(sum(m['monto'] for m in gastos if desde < m['fecha'] <= hasta))
+        meses.append(mm)
+    if not restos:
+        return None
+    resto = sum(restos) / len(restos)
+    return {'total': round(gastado + resto, 2), 'resto': round(resto, 2), 'desde_dia': hoy_d.day + 1, 'meses': meses}
+
+
+def conciliacion(d, en_cola=()):
+    """Entre las dos últimas revisiones de saldos: cambio de la plata en Bs contra ingresos - gastos anotados."""
+    if len(d['saldos']) < 2:
+        return None
+    a, b = d['saldos'][-2], d['saldos'][-1]
+    bs = {c['etiqueta'] for c in catalogo(d)['cuentas'] if c['moneda'] == 'Bs'}
+    cambio = sum(num(v) for k, v in b['valores'].items() if k in bs) - sum(num(v) for k, v in a['valores'].items() if k in bs)
+    movs = [m for m in movimientos(d, en_cola) if a['fecha'] < m['fecha'] <= b['fecha']]
+    ing = sum(m['monto'] for m in movs if m['tipo'] == 'Ingreso')
+    gas = sum(m['monto'] for m in movs if m['tipo'] == 'Gasto')
+    return {'desde': a['fecha'], 'hasta': b['fecha'], 'cambio': round(cambio, 2), 'ingresos': round(ing, 2),
+            'gastos': round(gas, 2), 'sin_anotar': round(cambio - ing + gas, 2)}
 
 
 # ===== Saldos =====
@@ -177,5 +218,16 @@ def saldos(d, tc, en_cola=()):
         'ultima_revision': desde, 'pendientes': pendientes,
         'total_bs': round(total_bs, 2), 'total_usd': round(total_usd, 2), 'todo_usd': round(todo_usd, 2),
         'diezmo_bs': round(diezmo_bs, 2), 'diezmo_usd': round(diezmo_usd, 2), 'ahorro_real_usd': round(todo_usd - diezmo_usd, 2),
-        'cuentas': cuentas,
+        'cuentas': cuentas, 'conciliacion': conciliacion(d, en_cola),
+        'historia': [{'fecha': x['fecha'], 'ahorro': round(_ahorro_columna(x, cat), 2)} for x in d['saldos']],
     }
+
+
+def _ahorro_columna(x, cat):
+    """Ahorro real de una revisión, igual que la fila de SALDOS (cada cuenta con su TC)."""
+    tco, tcp = num(x.get('tc_oficial')) or 10, num(x.get('tc_paralelo')) or 10
+    total = 0.0
+    for c in cat['cuentas']:
+        v = num(x['valores'].get(c['etiqueta']))
+        total += v if c['moneda'] == 'USD' else v / (tcp if c['tc'] == 'Paralelo' else tco)
+    return total - num(x.get('pendientes')) / tco - num(x.get('diezmo_usd'))

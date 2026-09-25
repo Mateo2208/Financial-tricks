@@ -511,3 +511,29 @@ button { cursor: pointer; }
 .foto-dif { margin: 4px 0 0; color: var(--pend); font-size: 13px; }
 .foto-dif:empty { display: none; }
 #form-foto .btn-primario { margin-top: 20px; }
+
+/* ===== Más sobria: el color queda en los puntos; barras y selección en tinta ===== */
+.pista-barra i { background: var(--tinta); opacity: .85; }
+.pista-barra.pasado i { background: var(--err); opacity: 1; }
+.pista-barra.sin-pres i { background: var(--tinta-3); opacity: .35; }
+.cat-cabeza .pista-barra, .linea-fila .pista-barra { height: 5px; }
+.chip[aria-pressed="true"] { border-color: var(--tinta); background: var(--bg-sutil); }
+.chip .punto { background: var(--c); }
+.categoria input:checked + span { background: var(--bg-sutil); }
+.lineas { border-left-color: var(--borde); }
+.total-monto { font-size: 46px; }
+.bloque-titulo { font-size: 16px; letter-spacing: -.005em; }
+.cifras div { background: transparent; border: 1px solid var(--borde); }
+
+.proyeccion { display: grid; gap: 2px; margin-top: 16px; padding: 12px 14px; border-left: 3px solid var(--tinta); background: var(--bg-sutil); border-radius: 0 var(--r-chico) var(--r-chico) 0; }
+.proyeccion-titulo { font-size: 13px; color: var(--tinta-2); font-weight: 600; }
+.proyeccion strong { font-size: 22px; }
+.proyeccion-texto { font-size: 13px; color: var(--tinta-2); }
+
+.evolucion { margin: 18px 0 0; color: var(--tinta); }
+.evolucion svg { display: block; width: 100%; height: 64px; }
+.evolucion figcaption { display: flex; justify-content: space-between; margin-top: 4px; font-size: 12px; color: var(--tinta-3); }
+
+.cuadra { margin-top: 10px; }
+.cuadra-total { padding-top: 8px; border-top: 1px solid var(--borde); font-weight: 700; }
+.cuadra-total.descuadre strong { color: var(--pend); }
