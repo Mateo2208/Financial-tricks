@@ -632,16 +632,16 @@ function pintarResumen(r, esActual) {
       ${pres ? `<div class="total-barra">${barra(r.gastado, pres)}</div>
         <p class="total-texto">${Math.round(pctTotal * 100)}% de ${escapeHtml(bs(pres))} presupuestados. <strong>${escapeHtml(textoUso(r.gastado, pres))}</strong></p>`
         : '<p class="total-texto">Sin presupuesto cargado para este mes.</p>'}
-      ${r.proyeccion ? `<div class="proyeccion">
-        <span class="proyeccion-titulo">Proyección a fin de mes</span>
-        <strong class="num">${escapeHtml(bs(Math.round(r.proyeccion.total)))}</strong>
-        <span class="proyeccion-texto">Lo gastado hasta hoy más lo que se suele gastar del ${r.proyeccion.desde_dia} a fin de mes (${escapeHtml(bs(Math.round(r.proyeccion.resto)))}, promedio de ${r.proyeccion.meses.map(m => fmtMesSolo.format(new Date(2026, m - 1, 1))).join(', ')}).${pres ? ` Quedaría en ${Math.round(r.proyeccion.total / pres * 100)}% del presupuesto.` : ''}</span>
-      </div>` : ''}
       <div class="cifras">
         <div><span>Ingresos</span><strong class="num ingreso">${escapeHtml(bs(r.ingresos))}</strong></div>
         <div><span>Resultado</span><strong class="num ${r.resultado < 0 ? 'negativo' : 'ingreso'}">${escapeHtml(bs(r.resultado))}</strong></div>
         ${esActual ? `<div><span>Hoy</span><strong class="num">${escapeHtml(bs(r.hoy))}</strong></div>` : ''}
       </div>
+      ${r.proyeccion ? `<div class="proyeccion">
+        <span class="proyeccion-titulo">Proyección a fin de mes</span>
+        <strong class="num">${escapeHtml(bs(Math.round(r.proyeccion.total)))}</strong>
+        <span class="proyeccion-texto">Lo gastado hasta hoy más lo que se suele gastar del ${r.proyeccion.desde_dia} a fin de mes (${escapeHtml(bs(Math.round(r.proyeccion.resto)))}, promedio de ${r.proyeccion.meses.map(m => fmtMesSolo.format(new Date(2026, m - 1, 1))).join(', ')}).${pres ? ` Quedaría en ${Math.round(r.proyeccion.total / pres * 100)}% del presupuesto.` : ''}</span>
+      </div>` : ''}
       ${r.anotando ? `<p class="anotando"><i aria-hidden="true"></i><span>${r.anotando} todavía anotándose en la planilla (ya están sumados)</span></p>` : ''}
     </div>
 
@@ -756,18 +756,7 @@ function pintarSaldos(s) {
       <p class="pista">Las cuentas de banco se pasan a dólares con el dólar del banco; el efectivo, con el paralelo.</p>
       ${graficoAhorro(s.historia)}
     </div>
-    ${s.conciliacion ? `<section class="bloque" aria-labelledby="t-cuadra">
-      <h2 id="t-cuadra" class="bloque-titulo">¿Cuadran los saldos?</h2>
-      <p class="pista">Entre las revisiones del ${escapeHtml(fechaCorta(s.conciliacion.desde))} y el ${escapeHtml(fechaCorta(s.conciliacion.hasta))}, en bolivianos.</p>
-      <ul class="lista-simple cuadra">
-        <li><span>Cambió la plata</span><strong class="num">${escapeHtml(bs(s.conciliacion.cambio))}</strong></li>
-        <li><span>Ingresos anotados</span><strong class="num">${escapeHtml(bs(s.conciliacion.ingresos))}</strong></li>
-        <li><span>Gastos anotados</span><strong class="num">${escapeHtml(bs(-s.conciliacion.gastos))}</strong></li>
-        <li class="cuadra-total${Math.abs(s.conciliacion.sin_anotar) >= 1 ? ' descuadre' : ''}"><span>Sin anotar</span><strong class="num">${escapeHtml(bs(s.conciliacion.sin_anotar))}</strong></li>
-      </ul>
-      <p class="pista">${Math.abs(s.conciliacion.sin_anotar) < 1 ? 'Todo lo que se movió está anotado.'
-        : s.conciliacion.sin_anotar < 0 ? 'Salió plata que no se anotó: gastos, transferencias o comisiones.' : 'Entró plata que no se anotó.'}</p>
-    </section>` : ''}
+
     <section class="bloque" aria-labelledby="t-cuentas">
       <h2 id="t-cuentas" class="bloque-titulo">Cuentas</h2>
       <ul class="filas">${s.cuentas.map(c => `
@@ -779,7 +768,19 @@ function pintarSaldos(s) {
         </li>`).join('')}</ul>
       <button type="button" class="btn-primario" id="btn-foto">Revisar saldos de hoy</button>
       <p class="pista">Anotá lo que muestra cada cuenta: se agrega una columna nueva en la hoja SALDOS.</p>
-    </section>`;
+    </section>
+    ${s.conciliacion ? `<section class="bloque" aria-labelledby="t-cuadra">
+      <h2 id="t-cuadra" class="bloque-titulo">¿Cuadran los saldos?</h2>
+      <p class="pista">Entre las revisiones del ${escapeHtml(fechaCorta(s.conciliacion.desde))} y el ${escapeHtml(fechaCorta(s.conciliacion.hasta))}, en bolivianos.</p>
+      <ul class="lista-simple cuadra">
+        <li><span>Cambió la plata</span><strong class="num">${escapeHtml(bs(s.conciliacion.cambio))}</strong></li>
+        <li><span>Ingresos anotados</span><strong class="num">${escapeHtml(bs(s.conciliacion.ingresos))}</strong></li>
+        <li><span>Gastos anotados</span><strong class="num">${escapeHtml(bs(-s.conciliacion.gastos))}</strong></li>
+        <li class="cuadra-total${Math.abs(s.conciliacion.sin_anotar) >= 1 ? ' descuadre' : ''}"><span>Sin anotar</span><strong class="num">${escapeHtml(bs(s.conciliacion.sin_anotar))}</strong></li>
+      </ul>
+      <p class="pista">${Math.abs(s.conciliacion.sin_anotar) < 1 ? 'Todo lo que se movió está anotado.'
+        : s.conciliacion.sin_anotar < 0 ? 'Salió plata que no se anotó: gastos, transferencias o comisiones.' : 'Entró plata que no se anotó.'}</p>
+    </section>` : ''}`;
   $('#btn-foto').onclick = () => pintarFormFoto(s);
 }
 

@@ -1,8 +1,8 @@
 // Offline: la app (HTML, CSS, JS, íconos) se guarda en el celular para abrir sin señal.
 // La API nunca se cachea: los registros sin señal los guarda app.js y los manda al volver.
 // Cambiar VERSION en cada deploy del front.
-const VERSION = 'qc-2026-09-26-9';
-const APP = ['/', '/app.css?v=9', '/app.js?v=9', '/manifest.webmanifest', '/fonts/inter-latin.woff2',
+const VERSION = 'qc-2026-09-26-10';
+const APP = ['/', '/app.css?v=10', '/app.js?v=10', '/manifest.webmanifest',
   '/icons/icon-192.png', '/icons/icon-512.png', '/icons/apple-touch-icon.png'];
 
 self.addEventListener('install', e => {
